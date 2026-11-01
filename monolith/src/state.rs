@@ -169,21 +169,66 @@ impl AppState {
         Ok(result.rows_affected())
     }
 
-    pub async fn get_user_profile(&self, user_id: Uuid) -> sqlx::Result<Profile> {
-        let profile = sqlx::query_as!(
+    /// A profile as seen by `viewer` (`None` = anonymous, so `following` is false).
+    pub async fn get_profile(
+        &self,
+        user_id: Uuid,
+        viewer: Option<Uuid>,
+    ) -> sqlx::Result<Option<Profile>> {
+        // ponytail: count(*) per read via idx_follows_followee_id; denormalize
+        // profiles.followers_count if celebrity profiles show up in the benchmark
+        sqlx::query_as!(
             Profile,
             r#"
-                SELECT p.name, p.pronouns, p.bio, COALESCE(f.followers_count, 0) AS "followers_count!"
+                SELECT p.user_id AS id, p.name, p.pronouns, p.bio,
+                       (SELECT count(*) FROM follows WHERE followee_id = p.user_id) AS "followers_count!",
+                       EXISTS (SELECT 1 FROM follows WHERE follower_id = $2 AND followee_id = p.user_id) AS "following!"
                 FROM profiles p
-                LEFT JOIN (
-                    SELECT followee_id, COUNT(*) AS followers_count
-                    FROM follows
-                    GROUP BY followee_id
-                ) f ON p.user_id = f.followee_id
                 WHERE p.user_id = $1
             "#,
-            user_id
-        ).fetch_one(&self.db).await?;
-        Ok(profile)
+            user_id,
+            viewer
+        )
+        .fetch_optional(&self.db)
+        .await
+    }
+
+    /// Full replacement; returns the updated profile as its owner sees it.
+    pub async fn update_profile(
+        &self,
+        user_id: Uuid,
+        name: &str,
+        pronouns: Option<&str>,
+        bio: Option<&str>,
+    ) -> sqlx::Result<Option<Profile>> {
+        sqlx::query_as!(
+            Profile,
+            r#"
+                UPDATE profiles
+                SET name = $2, pronouns = $3, bio = $4
+                WHERE user_id = $1
+                RETURNING user_id AS id, name, pronouns, bio,
+                          (SELECT count(*) FROM follows WHERE followee_id = $1) AS "followers_count!",
+                          false AS "following!"
+            "#,
+            user_id,
+            name,
+            pronouns,
+            bio
+        )
+        .fetch_optional(&self.db)
+        .await
+    }
+
+    /// Idempotent. An unknown `followee_id` surfaces as a foreign-key violation.
+    pub async fn follow(&self, follower_id: Uuid, followee_id: Uuid) -> sqlx::Result<()> {
+        sqlx::query!(
+            "INSERT INTO follows (follower_id, followee_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            follower_id,
+            followee_id
+        )
+        .execute(&self.db)
+        .await?;
+        Ok(())
     }
 }

@@ -15,8 +15,13 @@ pub fn init(state: AppState) -> Router {
         .route("/api/v1/users/login", post(user::login))
         .route("/api/v1/users/token", post(user::token))
         .route("/api/v1/users/me", get(user::me))
-        .route("/api/v1/profiles/:id", get(profile::get_profile))
-        .layer(DefaultBodyLimit::max(4096))
+        .route(
+            "/api/v1/profiles/me",
+            get(profile::me).put(profile::update_me),
+        )
+        .route("/api/v1/profiles/follow", post(profile::follow))
+        .route("/api/v1/profiles/{id}", get(profile::get_profile))
+        .layer(DefaultBodyLimit::max(16 * 1024))
         .layer(
             TraceLayer::new_for_http()
                 .on_request(())

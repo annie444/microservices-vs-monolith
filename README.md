@@ -20,10 +20,18 @@ All endpoints are under the `/api/v1` path.
 
 ### Profiles
 
-- `GET /profiles/:uuid` - Get a user's profile
+- `GET /profiles/:uuid` - Get a user's profile (`404` if unknown)
 - `GET /profiles/me` - The signed-in user's profile
-- `PUT /profiles/me` - Update the signed-in user's profile
-- `POST /profiles/follow` - Follow a profile
+- `PUT /profiles/me` - Replace the signed-in user's profile
+- `POST /profiles/follow` - Follow a profile (idempotent; returns the followed profile)
+
+A profile is `{"id", "name", "pronouns", "bio", "followers_count", "following"}`.
+`following` is whether the signed-in viewer follows it; anonymous viewers get `false`.
+
+`PUT /profiles/me` takes `{"name", "pronouns"?, "bio"?}` and replaces all three (omitted
+optionals become null). Limits: name 1-100 chars, pronouns 50, bio 2000; violations are `422`.
+
+`POST /profiles/follow` takes `{"id": "<uuid>"}`. Following yourself is `422`, an unknown id `404`.
 
 ### Auth model
 

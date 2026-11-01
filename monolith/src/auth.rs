@@ -1,4 +1,4 @@
-use axum::extract::FromRequestParts;
+use axum::extract::{FromRequestParts, OptionalFromRequestParts};
 use axum::http::request::Parts;
 use axum_extra::extract::CookieJar;
 use sha2::{Digest, Sha256};
@@ -10,6 +10,7 @@ use crate::state::AppState;
 
 /// The signed-in caller. Declaring it as a handler argument costs one primary-key lookup
 /// on `sessions`; missing, unknown, or expired session cookies are rejected with 401.
+/// Declare `Option<AuthUser>` on a public route to treat those cases as anonymous instead.
 pub struct AuthUser(pub Uuid);
 
 impl FromRequestParts<AppState> for AuthUser {
@@ -24,5 +25,20 @@ impl FromRequestParts<AppState> for AuthUser {
             .await?
             .map(Self)
             .ok_or(AppError::Unauthorized)
+    }
+}
+
+impl OptionalFromRequestParts<AppState> for AuthUser {
+    type Rejection = AppError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Option<Self>, AppError> {
+        match <Self as FromRequestParts<AppState>>::from_request_parts(parts, state).await {
+            Ok(user) => Ok(Some(user)),
+            Err(AppError::Unauthorized) => Ok(None),
+            Err(e) => Err(e),
+        }
     }
 }

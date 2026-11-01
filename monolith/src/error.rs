@@ -6,6 +6,7 @@ use serde::Serialize;
 #[derive(Debug)]
 pub enum AppError {
     Unauthorized,
+    NotFound(&'static str),
     Conflict(&'static str),
     Unprocessable(&'static str),
     TooManyRequests(u64),
@@ -21,6 +22,7 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, error) = match &self {
             Self::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
+            Self::NotFound(m) => (StatusCode::NOT_FOUND, *m),
             Self::Conflict(m) => (StatusCode::CONFLICT, *m),
             Self::Unprocessable(m) => (StatusCode::UNPROCESSABLE_ENTITY, *m),
             Self::TooManyRequests(_) => (StatusCode::TOO_MANY_REQUESTS, "too many attempts"),
