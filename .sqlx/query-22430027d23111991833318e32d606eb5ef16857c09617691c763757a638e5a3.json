@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                WITH u AS (\n                    INSERT INTO users (email, password_hash)\n                    VALUES ($1, $2)\n                    RETURNING id\n                )\n                INSERT INTO profiles (user_id, name)\n                SELECT id, $3 FROM u\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        {
+          "Custom": {
+            "name": "citext",
+            "kind": "Simple"
+          }
+        },
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "22430027d23111991833318e32d606eb5ef16857c09617691c763757a638e5a3"
+}

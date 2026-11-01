@@ -1,0 +1,41 @@
+[workspace]
+resolver = "3"
+members = ["monolith", "microservices/*"]
+
+[workspace.dependencies]
+anyhow = "1.0.104"
+argon2 = "0.6.0"
+axum = "0.8.9"
+axum-extra = { version = "0.12.6", features = ["cookie"] }
+base64 = "0.23.1"
+config = "0.15.27"
+rand = "0.10.3"
+serde = { version = "1.0.229", features = ["derive"] }
+sha2 = { version = "0.11.1", features = ["zeroize"] }
+sqlx = { version = "0.9.0", features = [
+  "postgres",
+  "runtime-tokio",
+  "time",
+  "tls-rustls",
+  "uuid",
+] }
+time = "0.3.55"
+tokio = { version = "1.54.1", features = [
+  "macros",
+  "net",
+  "rt-multi-thread",
+  "signal",
+  "time",
+] }
+tower-http = { version = "0.7.1", features = ["trace"] }
+tracing = "0.1.44"
+tracing-appender = "0.2.5"
+tracing-subscriber = { version = "0.3.23", features = ["fmt", "env-filter"] }
+unicode-normalization = "0.1.26"
+uuid = { version = "1.29.0", features = ["serde"] }
+thiserror = "2.0"
+
+# Both benchmark targets build with the same optimizations.
+[profile.release]
+lto = "fat"
+codegen-units = 1

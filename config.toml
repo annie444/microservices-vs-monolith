@@ -1,0 +1,17 @@
+[server]
+listen = "0.0.0.0"
+port = 8181
+# Behind the gateway, take the client IP from the rightmost X-Forwarded-For entry.
+# Leave off when clients connect directly, or they could forge the header.
+# behind_proxy = true
+
+[db]
+# DATABASE_URL in the environment overrides this.
+url = "postgres://postgres:postgres@localhost:5432/postgres"
+# max_connections defaults to 2 x CPU cores; must stay under Postgres' max_connections.
+# max_connections = 20
+
+# Failed-login limits per 60 s window; 0 disables a limiter (e.g. when benchmarking the 401 path).
+# [throttle]
+# email_failures_per_minute = 5
+# ip_failures_per_minute = 20

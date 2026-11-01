@@ -1,0 +1,83 @@
+prefix := "micro-vs-mono"
+pg_user := "postgres"
+pg_pass := "postgres"
+pg_db := "postgres"
+
+debug := '''
+set -euo pipefail
+if [[ -v DEBUG && -n "$DEBUG" ]]; then
+    set -x
+fi
+'''
+
+alias b := build
+alias l := lint
+alias f := fmt
+alias t := test
+
+[default]
+[private]
+default:
+    @just --list
+
+lint:
+    cargo clippy --workspace -- -D warnings
+
+test:
+    cargo nextest run --workspace --all-targets --no-fail-fast
+
+fmt:
+    cargo fmt --all
+
+build:
+    cargo build --workspace --all-targets
+
+pg-up:
+    #!/usr/bin/env bash
+    {{ debug }}
+    if ! podman volume exists "{{ prefix }}-pg-data"; then
+        podman volume create "{{ prefix }}-pg-data"
+    fi
+
+    if ! podman container exists "{{ prefix }}-pg"; then
+        podman run \
+            --rm \
+            --detach \
+            --env "POSTGRES_USER={{ pg_user }}" \
+            --env "POSTGRES_PASSWORD={{ pg_pass }}" \
+            --env "POSTGRES_DB={{ pg_db }}" \
+            --health-cmd "pg_isready -U {{ pg_user }} -d {{ pg_db }}" \
+            --health-interval 2s \
+            --health-retries 15 \
+            --health-timeout 2s \
+            --publish 5432:5432 \
+            --hostname "{{ prefix }}-pg" \
+            --name "{{ prefix }}-pg" \
+            --volume "{{ prefix }}-pg-data:/var/lib/postgresql" \
+            docker.io/library/postgres:18-alpine
+    fi
+
+pg-down: (_down "pg")
+
+pg-clean: (_clean "pg")
+
+pg-logs: (_logs "pg")
+
+_down name:
+    #!/usr/bin/env bash
+    {{ debug }}
+    if podman container exists "{{ prefix }}-{{ name }}"; then
+        podman stop "{{ prefix }}-{{ name }}"
+    fi
+
+_clean name:
+    #!/usr/bin/env bash
+    {{ debug }}
+    if podman volume exists "{{ prefix }}-{{ name }}-data"; then
+        podman volume rm "{{ prefix }}-{{ name }}-data"
+    fi
+
+_logs name:
+    #!/usr/bin/env bash
+    {{ debug }}
+    podman logs "{{ prefix }}-{{ name }}"
