@@ -14,5 +14,5 @@ BEFORE UPDATE ON comments
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
-CREATE INDEX idx_comments_article_id ON comments (article_id);
+CREATE INDEX idx_comments_article_id ON comments (article_id, id);
 CREATE INDEX idx_comments_user_id ON comments (user_id);

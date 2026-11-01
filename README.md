@@ -58,12 +58,19 @@ All endpoints are under the `/api/v1` path.
 
 ### Comments
 
-- `GET /comments/:article_id` - Get comments on an article
+- `GET /comments/:article_id` - Get comments on an article, oldest first (public; `404` if the
+  article is unknown)
   - Query: `?size=` (default 20, max 100) and `?cursor=` (the `next_cursor` of the previous
     page). A malformed cursor or size is `400`.
-- `POST /comments/:article_id` - Comment on an article
-- `PUT /comments/:article_id/:comment_id` - Update a comment (user's can only update their own comments)
-- `DELETE /comments/:article_id/:comment_id` - Delete a comment (user's can delete their own comments and comments on their articles)
+  - Returns `{"comments": [...], "pagination": {"next_cursor", "has_more", "size"}}`, paginated
+    like the article feed. A comment is `{"id", "article_id", "author": {"id", "name",
+    "pronouns"}, "content", "created_at", "updated_at"}`.
+- `POST /comments/:article_id` - Comment on an article (`201`, returns the comment)
+  - Takes `{"content"}`, 1-2000 chars after trimming (`422`). Unknown article is `404`.
+- `PUT /comments/:article_id/:comment_id` - Update a comment (users can only update their own
+  comments). Same body; anything you may not edit is `404`.
+- `DELETE /comments/:article_id/:comment_id` - Delete a comment (users can delete their own
+  comments and comments on their articles). `204` on success, otherwise `404`.
 
 ### Auth model
 

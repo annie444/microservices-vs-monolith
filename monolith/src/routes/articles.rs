@@ -11,12 +11,12 @@ use crate::auth::AuthUser;
 use crate::error::AppError;
 use crate::state::AppState;
 
-const DEFAULT_SIZE: u16 = 20;
-const MAX_SIZE: u16 = 100;
+pub(crate) const DEFAULT_SIZE: u16 = 20;
+pub(crate) const MAX_SIZE: u16 = 100;
 const NOT_FOUND: AppError = AppError::NotFound("article not found");
 
 #[derive(Debug, Serialize)]
-pub struct ArticleCreator {
+pub struct Author {
     pub id: Uuid,
     pub name: String,
     pub pronouns: Option<String>,
@@ -25,7 +25,7 @@ pub struct ArticleCreator {
 #[derive(Debug, Serialize)]
 pub struct FeedArticle {
     pub id: Uuid,
-    pub creator: ArticleCreator,
+    pub creator: Author,
     pub title: String,
     pub subtitle: Option<String>,
     #[serde(with = "time::serde::rfc3339")]
@@ -40,7 +40,7 @@ pub struct FeedArticle {
 #[derive(Debug, Serialize)]
 pub struct Article {
     pub id: Uuid,
-    pub creator: ArticleCreator,
+    pub creator: Author,
     pub title: String,
     pub subtitle: Option<String>,
     pub content: String,

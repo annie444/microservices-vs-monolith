@@ -1,6 +1,6 @@
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use tower_http::trace::{DefaultOnResponse, TraceLayer};
 use tracing::Level;
 
@@ -41,6 +41,14 @@ pub fn init(state: AppState) -> Router {
         .route(
             "/api/v1/articles/{id}/favorite",
             post(articles::favorite).delete(articles::unfavorite),
+        )
+        .route(
+            "/api/v1/comments/{article_id}",
+            get(comments::list).post(comments::create),
+        )
+        .route(
+            "/api/v1/comments/{article_id}/{comment_id}",
+            put(comments::update).delete(comments::delete),
         )
         .layer(DefaultBodyLimit::max(16 * 1024))
         .layer(

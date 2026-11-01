@@ -8,7 +8,8 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::config::{AppConfig, ThrottleConfig};
-use crate::routes::articles::{Article, ArticleCreator, FeedArticle};
+use crate::routes::articles::{Article, Author, FeedArticle};
+use crate::routes::comments::Comment;
 use crate::routes::profile::Profile;
 use crate::throttle::RateLimiter;
 
@@ -32,7 +33,7 @@ impl From<ArticleRow> for FeedArticle {
     fn from(r: ArticleRow) -> Self {
         Self {
             id: r.id,
-            creator: ArticleCreator {
+            creator: Author {
                 id: r.creator_id,
                 name: r.creator_name,
                 pronouns: r.creator_pronouns,
@@ -52,7 +53,7 @@ impl From<ArticleRow> for Article {
     fn from(r: ArticleRow) -> Self {
         Self {
             id: r.id,
-            creator: ArticleCreator {
+            creator: Author {
                 id: r.creator_id,
                 name: r.creator_name,
                 pronouns: r.creator_pronouns,
@@ -65,6 +66,34 @@ impl From<ArticleRow> for Article {
             tags: r.tags,
             favorites: r.favorites,
             favorited: r.favorited,
+        }
+    }
+}
+
+struct CommentRow {
+    id: Uuid,
+    article_id: Uuid,
+    content: String,
+    created_at: OffsetDateTime,
+    updated_at: OffsetDateTime,
+    author_id: Uuid,
+    author_name: String,
+    author_pronouns: Option<String>,
+}
+
+impl From<CommentRow> for Comment {
+    fn from(r: CommentRow) -> Self {
+        Self {
+            id: r.id,
+            article_id: r.article_id,
+            author: Author {
+                id: r.author_id,
+                name: r.author_name,
+                pronouns: r.author_pronouns,
+            },
+            content: r.content,
+            created_at: r.created_at,
+            updated_at: r.updated_at,
         }
     }
 }
@@ -465,6 +494,125 @@ impl AppState {
         )
         .fetch_optional(&self.db)
         .await
+    }
+
+    /// Comments on an article, oldest first, with `id > after`.
+    pub async fn list_comments(
+        &self,
+        article_id: Uuid,
+        after: Uuid,
+        limit: i64,
+    ) -> sqlx::Result<Vec<Comment>> {
+        let rows = sqlx::query_as!(
+            CommentRow,
+            r#"
+                SELECT c.id, c.article_id, c.content, c.created_at, c.updated_at,
+                       p.user_id AS author_id, p.name AS author_name, p.pronouns AS author_pronouns
+                FROM comments c
+                JOIN profiles p ON p.user_id = c.user_id
+                WHERE c.article_id = $1 AND c.id > $2
+                ORDER BY c.id
+                LIMIT $3
+            "#,
+            article_id,
+            after,
+            limit
+        )
+        .fetch_all(&self.db)
+        .await?;
+        Ok(rows.into_iter().map(Into::into).collect())
+    }
+
+    pub async fn article_exists(&self, id: Uuid) -> sqlx::Result<bool> {
+        sqlx::query_scalar!(
+            r#"SELECT EXISTS (SELECT 1 FROM articles WHERE id = $1) AS "exists!""#,
+            id
+        )
+        .fetch_one(&self.db)
+        .await
+    }
+
+    /// An unknown `article_id` surfaces as a foreign-key violation.
+    pub async fn create_comment(
+        &self,
+        article_id: Uuid,
+        user_id: Uuid,
+        content: &str,
+    ) -> sqlx::Result<Comment> {
+        let row = sqlx::query_as!(
+            CommentRow,
+            r#"
+                WITH c AS (
+                    INSERT INTO comments (article_id, user_id, content) VALUES ($1, $2, $3)
+                    RETURNING *
+                )
+                SELECT c.id AS "id!", c.article_id AS "article_id!", c.content AS "content!",
+                       c.created_at AS "created_at!", c.updated_at AS "updated_at!",
+                       p.user_id AS author_id, p.name AS author_name, p.pronouns AS author_pronouns
+                FROM c
+                JOIN profiles p ON p.user_id = c.user_id
+            "#,
+            article_id,
+            user_id,
+            content
+        )
+        .fetch_one(&self.db)
+        .await?;
+        Ok(row.into())
+    }
+
+    /// Only the author's own comment on that article matches; `None` otherwise.
+    pub async fn update_comment(
+        &self,
+        article_id: Uuid,
+        comment_id: Uuid,
+        user_id: Uuid,
+        content: &str,
+    ) -> sqlx::Result<Option<Comment>> {
+        let row = sqlx::query_as!(
+            CommentRow,
+            r#"
+                WITH c AS (
+                    UPDATE comments SET content = $4
+                    WHERE id = $2 AND article_id = $1 AND user_id = $3
+                    RETURNING *
+                )
+                SELECT c.id AS "id!", c.article_id AS "article_id!", c.content AS "content!",
+                       c.created_at AS "created_at!", c.updated_at AS "updated_at!",
+                       p.user_id AS author_id, p.name AS author_name, p.pronouns AS author_pronouns
+                FROM c
+                JOIN profiles p ON p.user_id = c.user_id
+            "#,
+            article_id,
+            comment_id,
+            user_id,
+            content
+        )
+        .fetch_optional(&self.db)
+        .await?;
+        Ok(row.map(Into::into))
+    }
+
+    /// The comment's author or the article's creator may delete. `true` if a row went.
+    pub async fn delete_comment(
+        &self,
+        article_id: Uuid,
+        comment_id: Uuid,
+        user_id: Uuid,
+    ) -> sqlx::Result<bool> {
+        let result = sqlx::query!(
+            r#"
+                DELETE FROM comments c USING articles a
+                WHERE c.id = $2 AND c.article_id = $1 AND a.id = c.article_id
+                  AND (c.user_id = $3 OR a.creator_id = $3)
+            "#,
+            article_id,
+            comment_id,
+            user_id
+        )
+        .execute(&self.db)
+        .await?;
+        Ok(result.rows_affected() > 0)
     }
 
     /// Idempotent; returns the followee's follower count after the insert. An unknown
