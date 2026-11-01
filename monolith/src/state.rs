@@ -8,8 +8,66 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::config::{AppConfig, ThrottleConfig};
+use crate::routes::articles::{Article, ArticleCreator, FeedArticle};
 use crate::routes::profile::Profile;
 use crate::throttle::RateLimiter;
+
+/// Flat shape of one article row; `query_as!` cannot build the nested `creator`.
+struct ArticleRow {
+    id: Uuid,
+    title: String,
+    subtitle: Option<String>,
+    content: Option<String>,
+    created_at: OffsetDateTime,
+    updated_at: OffsetDateTime,
+    creator_id: Uuid,
+    creator_name: String,
+    creator_pronouns: Option<String>,
+    tags: Vec<String>,
+    favorites: i64,
+    favorited: bool,
+}
+
+impl From<ArticleRow> for FeedArticle {
+    fn from(r: ArticleRow) -> Self {
+        Self {
+            id: r.id,
+            creator: ArticleCreator {
+                id: r.creator_id,
+                name: r.creator_name,
+                pronouns: r.creator_pronouns,
+            },
+            title: r.title,
+            subtitle: r.subtitle,
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+            tags: r.tags,
+            favorites: r.favorites,
+            favorited: r.favorited,
+        }
+    }
+}
+
+impl From<ArticleRow> for Article {
+    fn from(r: ArticleRow) -> Self {
+        Self {
+            id: r.id,
+            creator: ArticleCreator {
+                id: r.creator_id,
+                name: r.creator_name,
+                pronouns: r.creator_pronouns,
+            },
+            title: r.title,
+            subtitle: r.subtitle,
+            content: r.content.unwrap_or_default(),
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+            tags: r.tags,
+            favorites: r.favorites,
+            favorited: r.favorited,
+        }
+    }
+}
 
 pub const SESSION_TTL: time::Duration = time::Duration::minutes(15);
 pub const REFRESH_TTL: time::Duration = time::Duration::days(7);
@@ -220,15 +278,236 @@ impl AppState {
         .await
     }
 
-    /// Idempotent. An unknown `followee_id` surfaces as a foreign-key violation.
-    pub async fn follow(&self, follower_id: Uuid, followee_id: Uuid) -> sqlx::Result<()> {
-        sqlx::query!(
-            "INSERT INTO follows (follower_id, followee_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+    /// Newest-first page of articles with `id < before`. A viewer who follows anyone sees only
+    /// followees' articles; anonymous viewers and users following nobody see everything.
+    pub async fn feed(
+        &self,
+        viewer: Option<Uuid>,
+        before: Uuid,
+        limit: i64,
+    ) -> sqlx::Result<Vec<FeedArticle>> {
+        // Followee branch: the newest `limit` ids per followee straight off
+        // idx_articles_creator_id (creator_id, id DESC), merged by a top-N sort. Cost is
+        // follows x limit index entries, independent of how much history each author has.
+        // Global branch: its NOT EXISTS guard is uncorrelated, so Postgres evaluates it once
+        // and skips the branch (One-Time Filter) for anyone who follows someone.
+        // ponytail: ceiling is a few thousand follows per viewer; past that, fan-out on write
+        // (a feed_entries table filled at publish time) turns the read into one range scan.
+        let rows = sqlx::query_as!(
+            ArticleRow,
+            r#"
+                WITH page AS (
+                    (SELECT a.id FROM follows f
+                     JOIN LATERAL (
+                         SELECT id FROM articles
+                         WHERE creator_id = f.followee_id AND id < $2
+                         ORDER BY id DESC LIMIT $3
+                     ) a ON true
+                     WHERE f.follower_id = $1
+                     ORDER BY a.id DESC LIMIT $3)
+                    UNION ALL
+                    (SELECT id FROM articles
+                     WHERE id < $2 AND NOT EXISTS (SELECT 1 FROM follows WHERE follower_id = $1)
+                     ORDER BY id DESC LIMIT $3)
+                )
+                SELECT a.id, a.title, a.subtitle, NULL::text AS content, a.created_at, a.updated_at,
+                       p.user_id AS creator_id, p.name AS creator_name, p.pronouns AS creator_pronouns,
+                       (SELECT coalesce(array_agg(tag ORDER BY tag), '{}') FROM article_tags WHERE article_id = a.id) AS "tags!: Vec<String>",
+                       (SELECT count(*) FROM article_favorites WHERE article_id = a.id) AS "favorites!",
+                       EXISTS (SELECT 1 FROM article_favorites WHERE article_id = a.id AND user_id = $1) AS "favorited!"
+                FROM page
+                JOIN articles a ON a.id = page.id
+                JOIN profiles p ON p.user_id = a.creator_id
+                ORDER BY a.id DESC
+                LIMIT $3
+            "#,
+            viewer,
+            before,
+            limit
+        )
+        .fetch_all(&self.db)
+        .await?;
+        Ok(rows.into_iter().map(Into::into).collect())
+    }
+
+    pub async fn get_article(
+        &self,
+        id: Uuid,
+        viewer: Option<Uuid>,
+    ) -> sqlx::Result<Option<Article>> {
+        let row = sqlx::query_as!(
+            ArticleRow,
+            r#"
+                SELECT a.id, a.title, a.subtitle, a.content AS "content?", a.created_at, a.updated_at,
+                       p.user_id AS creator_id, p.name AS creator_name, p.pronouns AS creator_pronouns,
+                       (SELECT coalesce(array_agg(tag ORDER BY tag), '{}') FROM article_tags WHERE article_id = a.id) AS "tags!: Vec<String>",
+                       (SELECT count(*) FROM article_favorites WHERE article_id = a.id) AS "favorites!",
+                       EXISTS (SELECT 1 FROM article_favorites WHERE article_id = a.id AND user_id = $1) AS "favorited!"
+                FROM articles a
+                JOIN profiles p ON p.user_id = a.creator_id
+                WHERE a.id = $2
+            "#,
+            viewer,
+            id
+        )
+        .fetch_optional(&self.db)
+        .await?;
+        Ok(row.map(Into::into))
+    }
+
+    /// Inserts the article and its tags in one statement; returns the new id.
+    pub async fn create_article(
+        &self,
+        creator_id: Uuid,
+        title: &str,
+        subtitle: Option<&str>,
+        content: &str,
+        tags: &[String],
+    ) -> sqlx::Result<Uuid> {
+        // Sibling CTEs: the article_tags -> tags foreign key is checked after the whole
+        // statement, so it sees the tags inserted alongside.
+        sqlx::query_scalar!(
+            r#"
+                WITH a AS (
+                    INSERT INTO articles (creator_id, title, subtitle, content)
+                    VALUES ($1, $2, $3, $4) RETURNING id
+                ), t AS (
+                    INSERT INTO tags (tag) SELECT unnest($5::text[]) ON CONFLICT DO NOTHING
+                ), at AS (
+                    INSERT INTO article_tags (article_id, tag) SELECT a.id, unnest($5::text[]) FROM a
+                )
+                SELECT id AS "id!" FROM a
+            "#,
+            creator_id,
+            title,
+            subtitle,
+            content,
+            tags
+        )
+        .fetch_one(&self.db)
+        .await
+    }
+
+    /// Full replacement of an article the caller owns, tags included. `false` when no
+    /// article matches both `id` and `creator_id`.
+    pub async fn update_article(
+        &self,
+        id: Uuid,
+        creator_id: Uuid,
+        title: &str,
+        subtitle: Option<&str>,
+        content: &str,
+        tags: &[String],
+    ) -> sqlx::Result<bool> {
+        // Only tags leaving the set are deleted and the insert ignores ones that stay:
+        // deleting and re-inserting the same key in sibling CTEs is a duplicate-key error.
+        let updated = sqlx::query_scalar!(
+            r#"
+                WITH a AS (
+                    UPDATE articles SET title = $3, subtitle = $4, content = $5
+                    WHERE id = $1 AND creator_id = $2 RETURNING id
+                ), d AS (
+                    DELETE FROM article_tags
+                    WHERE article_id = (SELECT id FROM a) AND tag <> ALL($6::text[])
+                ), t AS (
+                    INSERT INTO tags (tag) SELECT unnest($6::text[]) ON CONFLICT DO NOTHING
+                ), at AS (
+                    INSERT INTO article_tags (article_id, tag) SELECT a.id, unnest($6::text[]) FROM a
+                    ON CONFLICT DO NOTHING
+                )
+                SELECT id AS "id!" FROM a
+            "#,
+            id,
+            creator_id,
+            title,
+            subtitle,
+            content,
+            tags
+        )
+        .fetch_optional(&self.db)
+        .await?;
+        Ok(updated.is_some())
+    }
+
+    /// Idempotent; returns the article's favorite count after the insert. An unknown
+    /// `article_id` surfaces as a foreign-key violation.
+    pub async fn favorite(&self, article_id: Uuid, user_id: Uuid) -> sqlx::Result<i64> {
+        sqlx::query_scalar!(
+            r#"
+                WITH ins AS (
+                    INSERT INTO article_favorites (article_id, user_id) VALUES ($1, $2)
+                    ON CONFLICT DO NOTHING RETURNING 1
+                )
+                SELECT (SELECT count(*) FROM article_favorites WHERE article_id = $1)
+                     + (SELECT count(*) FROM ins) AS "favorites!"
+            "#,
+            article_id,
+            user_id
+        )
+        .fetch_one(&self.db)
+        .await
+    }
+
+    /// Idempotent; returns the article's favorite count after the delete, `None` if the
+    /// article does not exist.
+    pub async fn unfavorite(&self, article_id: Uuid, user_id: Uuid) -> sqlx::Result<Option<i64>> {
+        sqlx::query_scalar!(
+            r#"
+                WITH del AS (
+                    DELETE FROM article_favorites WHERE article_id = $1 AND user_id = $2 RETURNING 1
+                )
+                SELECT (SELECT count(*) FROM article_favorites WHERE article_id = $1)
+                     - (SELECT count(*) FROM del) AS "favorites!"
+                FROM articles WHERE id = $1
+            "#,
+            article_id,
+            user_id
+        )
+        .fetch_optional(&self.db)
+        .await
+    }
+
+    /// Idempotent; returns the followee's follower count after the insert. An unknown
+    /// `followee_id` surfaces as a foreign-key violation.
+    pub async fn follow(&self, follower_id: Uuid, followee_id: Uuid) -> sqlx::Result<i64> {
+        // The count subquery runs on the statement's snapshot and cannot see the CTE's own
+        // insert, so the inserted row (0 or 1) is added back from RETURNING.
+        sqlx::query_scalar!(
+            r#"
+                WITH ins AS (
+                    INSERT INTO follows (follower_id, followee_id) VALUES ($1, $2)
+                    ON CONFLICT DO NOTHING RETURNING 1
+                )
+                SELECT (SELECT count(*) FROM follows WHERE followee_id = $2)
+                     + (SELECT count(*) FROM ins) AS "followers_count!"
+            "#,
             follower_id,
             followee_id
         )
-        .execute(&self.db)
-        .await?;
-        Ok(())
+        .fetch_one(&self.db)
+        .await
+    }
+
+    /// Idempotent; returns the followee's follower count after the delete, `None` if the
+    /// profile does not exist.
+    pub async fn unfollow(
+        &self,
+        follower_id: Uuid,
+        followee_id: Uuid,
+    ) -> sqlx::Result<Option<i64>> {
+        sqlx::query_scalar!(
+            r#"
+                WITH del AS (
+                    DELETE FROM follows WHERE follower_id = $1 AND followee_id = $2 RETURNING 1
+                )
+                SELECT (SELECT count(*) FROM follows WHERE followee_id = $2)
+                     - (SELECT count(*) FROM del) AS "followers_count!"
+                FROM profiles WHERE user_id = $2
+            "#,
+            follower_id,
+            followee_id
+        )
+        .fetch_optional(&self.db)
+        .await
     }
 }

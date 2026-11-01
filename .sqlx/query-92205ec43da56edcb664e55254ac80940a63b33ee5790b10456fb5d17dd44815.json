@@ -1,0 +1,142 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                WITH page AS (\n                    (SELECT a.id FROM follows f\n                     JOIN LATERAL (\n                         SELECT id FROM articles\n                         WHERE creator_id = f.followee_id AND id < $2\n                         ORDER BY id DESC LIMIT $3\n                     ) a ON true\n                     WHERE f.follower_id = $1\n                     ORDER BY a.id DESC LIMIT $3)\n                    UNION ALL\n                    (SELECT id FROM articles\n                     WHERE id < $2 AND NOT EXISTS (SELECT 1 FROM follows WHERE follower_id = $1)\n                     ORDER BY id DESC LIMIT $3)\n                )\n                SELECT a.id, a.title, a.subtitle, NULL::text AS content, a.created_at, a.updated_at,\n                       p.user_id AS creator_id, p.name AS creator_name, p.pronouns AS creator_pronouns,\n                       (SELECT coalesce(array_agg(tag ORDER BY tag), '{}') FROM article_tags WHERE article_id = a.id) AS \"tags!: Vec<String>\",\n                       (SELECT count(*) FROM article_favorites WHERE article_id = a.id) AS \"favorites!\",\n                       EXISTS (SELECT 1 FROM article_favorites WHERE article_id = a.id AND user_id = $1) AS \"favorited!\"\n                FROM page\n                JOIN articles a ON a.id = page.id\n                JOIN profiles p ON p.user_id = a.creator_id\n                ORDER BY a.id DESC\n                LIMIT $3\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "subtitle",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "subtitle"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "content",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "updated_at"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "creator_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "profiles",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "creator_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "profiles",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "creator_pronouns",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "profiles",
+            "name": "pronouns"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "tags!: Vec<String>",
+        "type_info": "TextArray",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "favorites!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "favorited!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      null,
+      false,
+      false,
+      false,
+      false,
+      true,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "92205ec43da56edcb664e55254ac80940a63b33ee5790b10456fb5d17dd44815"
+}

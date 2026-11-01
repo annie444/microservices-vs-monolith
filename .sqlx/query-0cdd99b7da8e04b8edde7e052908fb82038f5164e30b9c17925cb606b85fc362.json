@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                WITH a AS (\n                    INSERT INTO articles (creator_id, title, subtitle, content)\n                    VALUES ($1, $2, $3, $4) RETURNING id\n                ), t AS (\n                    INSERT INTO tags (tag) SELECT unnest($5::text[]) ON CONFLICT DO NOTHING\n                ), at AS (\n                    INSERT INTO article_tags (article_id, tag) SELECT a.id, unnest($5::text[]) FROM a\n                )\n                SELECT id AS \"id!\" FROM a\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0cdd99b7da8e04b8edde7e052908fb82038f5164e30b9c17925cb606b85fc362"
+}

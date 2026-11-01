@@ -7,6 +7,8 @@ use tracing::Level;
 use crate::routes::*;
 use crate::state::AppState;
 
+const ARTICLE_BODY_LIMIT: usize = 256 * 1024;
+
 pub fn init(state: AppState) -> Router {
     std::sync::LazyLock::force(&user::DUMMY_HASH);
     Router::new()
@@ -19,8 +21,27 @@ pub fn init(state: AppState) -> Router {
             "/api/v1/profiles/me",
             get(profile::me).put(profile::update_me),
         )
-        .route("/api/v1/profiles/follow", post(profile::follow))
         .route("/api/v1/profiles/{id}", get(profile::get_profile))
+        .route(
+            "/api/v1/profiles/{id}/follow",
+            post(profile::follow).delete(profile::unfollow),
+        )
+        .route("/api/v1/articles/feed", get(articles::feed))
+        // Article bodies may exceed the router-wide limit; the inner layer wins.
+        .route(
+            "/api/v1/articles/new",
+            post(articles::create).layer(DefaultBodyLimit::max(ARTICLE_BODY_LIMIT)),
+        )
+        .route(
+            "/api/v1/articles/{id}",
+            get(articles::get_article)
+                .put(articles::update)
+                .layer(DefaultBodyLimit::max(ARTICLE_BODY_LIMIT)),
+        )
+        .route(
+            "/api/v1/articles/{id}/favorite",
+            post(articles::favorite).delete(articles::unfavorite),
+        )
         .layer(DefaultBodyLimit::max(16 * 1024))
         .layer(
             TraceLayer::new_for_http()

@@ -25,9 +25,9 @@ pub struct UpdateProfile {
     pub bio: Option<String>,
 }
 
-#[derive(Deserialize)]
-pub struct FollowRequest {
-    pub id: Uuid,
+#[derive(Debug, Serialize)]
+pub struct FollowersCount {
+    pub followers_count: i64,
 }
 
 const NOT_FOUND: AppError = AppError::NotFound("profile not found");
@@ -103,24 +103,34 @@ pub async fn update_me(
         .ok_or(NOT_FOUND)
 }
 
+/// Idempotent; returns the followee's updated follower count.
 #[tracing::instrument(skip_all)]
 pub async fn follow(
     State(state): State<AppState>,
     AuthUser(me): AuthUser,
-    Json(req): Json<FollowRequest>,
-) -> Result<Json<Profile>, AppError> {
-    if req.id == me {
+    Path(id): Path<Uuid>,
+) -> Result<Json<FollowersCount>, AppError> {
+    if id == me {
         return Err(AppError::Unprocessable("cannot follow yourself"));
     }
-    match state.follow(me, req.id).await {
-        Ok(()) => {}
-        Err(sqlx::Error::Database(e)) if e.is_foreign_key_violation() => return Err(NOT_FOUND),
-        Err(e) => return Err(e.into()),
+    match state.follow(me, id).await {
+        Ok(followers_count) => Ok(Json(FollowersCount { followers_count })),
+        Err(sqlx::Error::Database(e)) if e.is_foreign_key_violation() => Err(NOT_FOUND),
+        Err(e) => Err(e.into()),
     }
+}
+
+/// Idempotent; returns the followee's updated follower count.
+#[tracing::instrument(skip_all)]
+pub async fn unfollow(
+    State(state): State<AppState>,
+    AuthUser(me): AuthUser,
+    Path(id): Path<Uuid>,
+) -> Result<Json<FollowersCount>, AppError> {
     state
-        .get_profile(req.id, Some(me))
+        .unfollow(me, id)
         .await?
-        .map(Json)
+        .map(|followers_count| Json(FollowersCount { followers_count }))
         .ok_or(NOT_FOUND)
 }
 
@@ -152,10 +162,6 @@ mod tests {
             pronouns: pronouns.map(Into::into),
             bio: bio.map(Into::into),
         })
-    }
-
-    fn follow_req(id: Uuid) -> Json<FollowRequest> {
-        Json(FollowRequest { id })
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -208,22 +214,36 @@ mod tests {
             Err(AppError::Unprocessable(_))
         ));
 
-        let p = follow(st.clone(), AuthUser(a), follow_req(b))
-            .await
-            .unwrap()
-            .0;
-        assert_eq!((p.id, p.followers_count, p.following), (b, 1, true));
-        let p = follow(st.clone(), AuthUser(a), follow_req(b))
-            .await
-            .unwrap()
-            .0;
-        assert_eq!(p.followers_count, 1, "idempotent");
+        let count = |r: Result<Json<FollowersCount>, AppError>| r.unwrap().0.followers_count;
+        assert_eq!(count(follow(st.clone(), AuthUser(a), Path(b)).await), 1);
+        assert_eq!(
+            count(follow(st.clone(), AuthUser(a), Path(b)).await),
+            1,
+            "idempotent"
+        );
+        assert_eq!(count(follow(st.clone(), AuthUser(b), Path(a)).await), 1);
         assert!(matches!(
-            follow(st.clone(), AuthUser(a), follow_req(a)).await,
+            follow(st.clone(), AuthUser(a), Path(a)).await,
             Err(AppError::Unprocessable(_))
         ));
         assert!(matches!(
-            follow(st.clone(), AuthUser(a), follow_req(Uuid::nil())).await,
+            follow(st.clone(), AuthUser(a), Path(Uuid::nil())).await,
+            Err(AppError::NotFound(_))
+        ));
+
+        assert_eq!(count(unfollow(st.clone(), AuthUser(b), Path(a)).await), 0);
+        assert_eq!(
+            count(unfollow(st.clone(), AuthUser(b), Path(a)).await),
+            0,
+            "idempotent"
+        );
+        assert_eq!(
+            count(unfollow(st.clone(), AuthUser(b), Path(b)).await),
+            1,
+            "a still follows b"
+        );
+        assert!(matches!(
+            unfollow(st.clone(), AuthUser(a), Path(Uuid::nil())).await,
             Err(AppError::NotFound(_))
         ));
 

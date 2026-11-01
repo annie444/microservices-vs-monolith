@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                WITH ins AS (\n                    INSERT INTO article_favorites (article_id, user_id) VALUES ($1, $2)\n                    ON CONFLICT DO NOTHING RETURNING 1\n                )\n                SELECT (SELECT count(*) FROM article_favorites WHERE article_id = $1)\n                     + (SELECT count(*) FROM ins) AS \"favorites!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "favorites!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "fe62116728de3bdf70687d3b9c72e8d8bfd636bf70e8462e76bfca19b46d8d17"
+}

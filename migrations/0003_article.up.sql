@@ -13,7 +13,7 @@ BEFORE UPDATE ON articles
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
-CREATE INDEX idx_articles_creator_id ON articles (creator_id);
+CREATE INDEX idx_articles_creator_id ON articles (creator_id, id DESC);
 
 CREATE TABLE tags (
   tag         text PRIMARY KEY

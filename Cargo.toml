@@ -19,7 +19,7 @@ sqlx = { version = "0.9.0", features = [
   "tls-rustls",
   "uuid",
 ] }
-time = "0.3.55"
+time = { version = "0.3.55", features = ["serde-well-known"] }
 tokio = { version = "1.54.1", features = [
   "macros",
   "net",

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                WITH t AS (INSERT INTO tags (tag) VALUES ('rust'), ('axum') RETURNING tag)\n                INSERT INTO article_tags (article_id, tag) SELECT $1, tag FROM t\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9d309351a1cee17bc5cab9da03d8d00f9737578f8017372c6fcd06d0ad24d5ba"
+}

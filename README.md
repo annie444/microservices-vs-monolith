@@ -21,17 +21,49 @@ All endpoints are under the `/api/v1` path.
 ### Profiles
 
 - `GET /profiles/:uuid` - Get a user's profile (`404` if unknown)
+  - A profile is `{"id", "name", "pronouns", "bio", "followers_count", "following"}`.
+    `following` is whether the signed-in viewer follows it; anonymous viewers get `false`.
 - `GET /profiles/me` - The signed-in user's profile
 - `PUT /profiles/me` - Replace the signed-in user's profile
-- `POST /profiles/follow` - Follow a profile (idempotent; returns the followed profile)
+  - Takes `{"name", "pronouns"?, "bio"?}` and replaces all three (omitted
+    optionals become null). Limits: name 1-100 chars, pronouns 50, bio 2000; violations are `422`.
+- `POST /profiles/:id/follow` - Follow a profile. Following yourself is `422`, an unknown id `404`.
+- `DELETE /profiles/:id/follow` - Unfollow a profile (unknown id `404`)
+  - Both are idempotent and return only `{"followers_count"}` for that profile.
 
-A profile is `{"id", "name", "pronouns", "bio", "followers_count", "following"}`.
-`following` is whether the signed-in viewer follows it; anonymous viewers get `false`.
+### Articles
 
-`PUT /profiles/me` takes `{"name", "pronouns"?, "bio"?}` and replaces all three (omitted
-optionals become null). Limits: name 1-100 chars, pronouns 50, bio 2000; violations are `422`.
+- `GET /articles/feed` - Get a feed of articles, sorted by most recently posted
+  - If you're logged in and follow anyone, you only get the articles from those you follow
+    (your own excluded). Anonymous viewers and users who follow nobody get every article.
+  - Query: `?size=` (default 20, max 100) and `?cursor=` (the `next_cursor` of the previous
+    page). A malformed cursor or size is `400`.
+  - Returns `{"articles": [...], "pagination": {"next_cursor", "has_more", "size"}}`.
+    `next_cursor` is the id of the last article on the page (the nil UUID when the page is
+    empty); keep fetching while `has_more` is true.
+  - A feed article is `{"id", "creator": {"id", "name", "pronouns"}, "title", "subtitle",
+"created_at", "updated_at", "tags", "favorites", "favorited"}`. Timestamps are RFC 3339;
+    `favorited` is whether the signed-in viewer favorited it.
+- `GET /articles/:id` - Get a specific article (`404` if unknown)
+  - Same shape as a feed article plus `"content"`.
+- `POST /articles/new` - Create an article (`201`, returns the article)
+  - Takes `{"title", "subtitle"?, "content", "tags"?}`. Limits: title 1-200 chars, subtitle
+    300, content 50000, at most 10 tags of 1-30 chars (trimmed, lowercased, deduplicated);
+    violations are `422`. Bodies over 256 KiB are `413`.
+- `PUT /articles/:id` - Replace an article you created (same body and limits; `tags` replaces
+  the whole set). An unknown id or someone else's article is `404`.
+- `POST /articles/:id/favorite` - Like an article
+- `DELETE /articles/:id/favorite` - Unlike an article
+  - Both are idempotent and return only `{"favorites"}`; an unknown id is `404`.
 
-`POST /profiles/follow` takes `{"id": "<uuid>"}`. Following yourself is `422`, an unknown id `404`.
+### Comments
+
+- `GET /comments/:article_id` - Get comments on an article
+  - Query: `?size=` (default 20, max 100) and `?cursor=` (the `next_cursor` of the previous
+    page). A malformed cursor or size is `400`.
+- `POST /comments/:article_id` - Comment on an article
+- `PUT /comments/:article_id/:comment_id` - Update a comment (user's can only update their own comments)
+- `DELETE /comments/:article_id/:comment_id` - Delete a comment (user's can delete their own comments and comments on their articles)
 
 ### Auth model
 
