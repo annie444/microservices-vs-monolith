@@ -1,0 +1,82 @@
+---
+name: Build Containers
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package:
+          - monolith
+          - user-api
+          - article-api
+          - comment-api
+          - profile-api
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Log in to GHCR
+        uses: redhat-actions/podman-login@v2
+        with:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: ghcr.io
+
+      - name: Generate container image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/annie444/micro-vs-mono-${{ matrix.package }}
+          flavor: |
+            latest=${{ github.ref == format('refs/heads/{0}', 'main') }}
+          labels: |
+            provider=IPAC
+            issues=https://github.com/annie444/microservices-vs-monolith/issues
+            org.opencontainers.image.title=Microservices vs Monolith: ${{ matrix.package }}
+            org.opencontainers.image.source=https://github.com/annie444/microservices-vs-monolith
+            org.opencontainers.image.url=https://github.com/annie444/microservices-vs-monolith/pkgs/container/micro-vs-mono-${{ matrix.package }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha
+            type=raw,value=latest-dev
+
+      - name: Build
+        id: build
+        uses: redhat-actions/buildah-build@v3
+        with:
+          oci: true
+          image: ghcr.io/annie444/micro-vs-mono-${{ matrix.package }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            PACKAGE=${{ matrix.package }}
+          context: .
+          containerfiles: Containerfile
+          platforms: linux/amd64
+
+      - name: Push
+        uses: redhat-actions/push-to-registry@v3
+        with:
+          image: ${{ steps.build.outputs.image }}
+          tags: ${{ steps.build.outputs.tags }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
