@@ -81,7 +81,8 @@ All endpoints are under the `/api/v1` path.
 - Expired sessions are deleted by a `pg_cron` job (`sweep-sessions`, every 5 min) installed by
   the migrations. The dev container (`db/Containerfile`, started by `just pg-up`) ships it;
   production Postgres needs `shared_preload_libraries = 'pg_cron'` and `cron.database_name` set
-  to the app database.
+  to the app database. The server checks at startup that the pg_cron launcher is running and the
+  job is scheduled, and refuses to start otherwise.
 - Replaying a refresh token that has already been rotated revokes the whole session. Clients
   must not call `/users/token` concurrently.
 - Login throttling never locks an account. Failed logins are rate-limited per email (5 per

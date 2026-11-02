@@ -32,6 +32,10 @@ fmt:
 build:
     cargo build --workspace --all-targets
 
+container app:
+    podman build -t "ghcr.io/annie444/{{ app }}:latest" \
+        --build-arg PACKAGE="{{ app }}" .
+
 pg-up:
     #!/usr/bin/env bash
     {{ debug }}

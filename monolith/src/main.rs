@@ -22,6 +22,10 @@ async fn main() -> anyhow::Result<()> {
         .await
         .context("Unable to connect to database")?;
     state.migrate().await.context("Unable to run migrations")?;
+    state
+        .check_session_sweeper()
+        .await
+        .context("Expired sessions would never be swept; refusing to start")?;
 
     let listener = TcpListener::bind((config.server.listen, config.server.port))
         .await
