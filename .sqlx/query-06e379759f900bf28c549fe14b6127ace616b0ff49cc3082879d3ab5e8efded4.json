@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                WITH del AS (\n                    DELETE FROM article_favorites WHERE article_id = $1 AND user_id = $2 RETURNING 1\n                )\n                SELECT coalesce(s.favorites_count, 0) - (SELECT count(*) FROM del) AS \"favorites!\"\n                FROM articles a\n                LEFT JOIN article_stats s ON s.article_id = a.id\n                WHERE a.id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "favorites!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "06e379759f900bf28c549fe14b6127ace616b0ff49cc3082879d3ab5e8efded4"
+}

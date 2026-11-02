@@ -367,6 +367,20 @@ mod tests {
         let b = user(&state, "b@b.c", "Bob").await;
         let id = article(&state, a, "t").await;
         let count = |r: Result<Json<Favorites>, AppError>| r.unwrap().0.favorites;
+        // xmin changes whenever a row version is written; the article row must stay put.
+        let xmin = |db: &PgPool| {
+            let db = db.clone();
+            async move {
+                sqlx::query_scalar!(
+                    r#"SELECT xmin::text AS "xmin!" FROM articles WHERE id = $1"#,
+                    id
+                )
+                .fetch_one(&db)
+                .await
+                .unwrap()
+            }
+        };
+        let before = xmin(&state.db).await;
 
         assert_eq!(count(favorite(st.clone(), AuthUser(a), Path(id)).await), 1);
         assert_eq!(
@@ -381,6 +395,11 @@ mod tests {
             .0;
         assert_eq!((art.favorites, art.favorited), (2, true));
         assert_eq!(art.updated_at, art.created_at, "favoriting is not an edit");
+        assert_eq!(
+            xmin(&state.db).await,
+            before,
+            "favoriting must not rewrite the article row"
+        );
 
         // The counter is kept by a trigger, so it also tracks cascade deletes.
         sqlx::query!("DELETE FROM users WHERE id = $1", b)

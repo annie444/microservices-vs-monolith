@@ -338,11 +338,12 @@ impl AppState {
                 SELECT a.id, a.title, a.subtitle, NULL::text AS content, a.created_at, a.updated_at,
                        p.user_id AS creator_id, p.name AS creator_name, p.pronouns AS creator_pronouns,
                        (SELECT coalesce(array_agg(tag ORDER BY tag), '{}') FROM article_tags WHERE article_id = a.id) AS "tags!: Vec<String>",
-                       a.favorites_count AS favorites,
+                       coalesce(s.favorites_count, 0) AS "favorites!",
                        EXISTS (SELECT 1 FROM article_favorites WHERE article_id = a.id AND user_id = $1) AS "favorited!"
                 FROM page
                 JOIN articles a ON a.id = page.id
                 JOIN profiles p ON p.user_id = a.creator_id
+                LEFT JOIN article_stats s ON s.article_id = a.id
                 ORDER BY a.id DESC
                 LIMIT $3
             "#,
@@ -366,10 +367,11 @@ impl AppState {
                 SELECT a.id, a.title, a.subtitle, a.content AS "content?", a.created_at, a.updated_at,
                        p.user_id AS creator_id, p.name AS creator_name, p.pronouns AS creator_pronouns,
                        (SELECT coalesce(array_agg(tag ORDER BY tag), '{}') FROM article_tags WHERE article_id = a.id) AS "tags!: Vec<String>",
-                       a.favorites_count AS favorites,
+                       coalesce(s.favorites_count, 0) AS "favorites!",
                        EXISTS (SELECT 1 FROM article_favorites WHERE article_id = a.id AND user_id = $1) AS "favorited!"
                 FROM articles a
                 JOIN profiles p ON p.user_id = a.creator_id
+                LEFT JOIN article_stats s ON s.article_id = a.id
                 WHERE a.id = $2
             "#,
             viewer,
@@ -465,8 +467,10 @@ impl AppState {
                     INSERT INTO article_favorites (article_id, user_id) VALUES ($1, $2)
                     ON CONFLICT DO NOTHING RETURNING 1
                 )
-                SELECT favorites_count + (SELECT count(*) FROM ins) AS "favorites!"
-                FROM articles WHERE id = $1
+                SELECT coalesce(s.favorites_count, 0) + (SELECT count(*) FROM ins) AS "favorites!"
+                FROM articles a
+                LEFT JOIN article_stats s ON s.article_id = a.id
+                WHERE a.id = $1
             "#,
             article_id,
             user_id
@@ -483,8 +487,10 @@ impl AppState {
                 WITH del AS (
                     DELETE FROM article_favorites WHERE article_id = $1 AND user_id = $2 RETURNING 1
                 )
-                SELECT favorites_count - (SELECT count(*) FROM del) AS "favorites!"
-                FROM articles WHERE id = $1
+                SELECT coalesce(s.favorites_count, 0) - (SELECT count(*) FROM del) AS "favorites!"
+                FROM articles a
+                LEFT JOIN article_stats s ON s.article_id = a.id
+                WHERE a.id = $1
             "#,
             article_id,
             user_id

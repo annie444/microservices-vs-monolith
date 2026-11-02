@@ -4,16 +4,13 @@ CREATE TABLE articles (
   title       text NOT NULL,
   subtitle    text,
   content     text NOT NULL,
-  favorites_count bigint NOT NULL DEFAULT 0,  -- maintained by bump_favorites_count
   created_at  timestamptz NOT NULL DEFAULT now(),
   updated_at  timestamptz NOT NULL DEFAULT now()
 );
 
--- A favorite is not an edit: only bump updated_at when the counter did not move.
 CREATE TRIGGER set_updated_at
 BEFORE UPDATE ON articles
 FOR EACH ROW
-WHEN (OLD.favorites_count = NEW.favorites_count)
 EXECUTE FUNCTION update_updated_at_column();
 
 CREATE INDEX idx_articles_creator_id ON articles (creator_id, id DESC);
@@ -39,14 +36,22 @@ CREATE TABLE article_favorites (
 CREATE INDEX idx_article_favorites_user_id ON article_favorites (user_id);
 CREATE INDEX idx_article_favorites_article_id ON article_favorites (article_id);
 
+-- Counters live apart from articles so a favorite rewrites this small row, not the article
+-- (Postgres updates copy the whole row). Rows appear on first favorite; reads LEFT JOIN.
+CREATE TABLE article_stats (
+  article_id      uuid PRIMARY KEY REFERENCES articles (id) ON DELETE CASCADE,
+  favorites_count bigint NOT NULL DEFAULT 0
+);
+
 -- Row trigger (not application code) so cascade deletes of users keep the count honest.
 CREATE FUNCTION bump_favorites_count()
 RETURNS TRIGGER AS $$
 BEGIN
     IF TG_OP = 'INSERT' THEN
-        UPDATE articles SET favorites_count = favorites_count + 1 WHERE id = NEW.article_id;
+        INSERT INTO article_stats (article_id, favorites_count) VALUES (NEW.article_id, 1)
+        ON CONFLICT (article_id) DO UPDATE SET favorites_count = article_stats.favorites_count + 1;
     ELSE
-        UPDATE articles SET favorites_count = favorites_count - 1 WHERE id = OLD.article_id;
+        UPDATE article_stats SET favorites_count = favorites_count - 1 WHERE article_id = OLD.article_id;
     END IF;
     RETURN NULL;
 END;
