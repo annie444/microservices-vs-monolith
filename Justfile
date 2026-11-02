@@ -116,7 +116,8 @@ pg-micro-up:
             --volume "$PWD/db/micro-init:/docker-entrypoint-initdb.d:ro" \
             "{{ prefix }}-pg" \
             -c shared_preload_libraries=pg_cron \
-            -c cron.database_name=user_api
+            -c cron.database_name=user_api \
+            -c max_connections=300
     fi
 
 pg-micro-down: (_down "pg-micro")
@@ -127,3 +128,6 @@ pg-micro-logs: (_logs "pg-micro")
 
 run-user-api:
     cd microservices/user-api && cargo run
+
+run-profile-api:
+    cd microservices/profile-api && cargo run

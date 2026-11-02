@@ -1307,6 +1307,18 @@ dependencies = [
 [[package]]
 name = "profile-api"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "common",
+ "reqwest",
+ "serde",
+ "sqlx",
+ "tokio",
+ "tower-http 0.7.1",
+ "tracing",
+ "uuid",
+]
 
 [[package]]
 name = "quinn"

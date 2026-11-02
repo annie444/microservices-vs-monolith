@@ -124,3 +124,18 @@ Service-to-service calls use `/internal/...` routes, which the gateway must neve
   (or `200` if it already exists). Called by user-api during registration; if it fails the new
   user is deleted again and the client gets `502`. Until profile-api exists, point
   `profile_api.url` at a stub that answers `201`.
+- `POST /internal/follow-events` on article-api, body
+  `[{"id", "follower_id", "followee_id", "kind": "follow" | "unfollow"}, ...]` → `204`.
+  profile-api records every follow/unfollow (including cascades) in a `follow_events` outbox
+  and a single dispatcher (advisory-locked, so one per cluster) delivers batches of 100 in id
+  order, deleting rows only after a `2xx`. Delivery is at-least-once, so article-api must apply
+  `follow` as `INSERT ... ON CONFLICT DO NOTHING` and `unfollow` as `DELETE`, in array order.
+  Feeds are therefore eventually consistent with the follow graph. While article-api is down,
+  events accumulate and profile-api logs a warning with exponential backoff (1 s to 30 s).
+
+### profile-api
+
+Port 8202, database `profile_api`, env prefix `PROFILE_API_`. Serves the Profiles API unchanged,
+plus `POST /internal/profiles` for user-api. Needs an `auth_db` pool into `user_api` as
+`session_verifier` (8 connections by default). The micro cluster runs with
+`max_connections = 300` so four services with two pools each fit.
