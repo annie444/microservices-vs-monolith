@@ -12,28 +12,33 @@ CREATE TABLE profiles (
   name            text NOT NULL,
   pronouns        text,
   bio             text,
-  followers_count bigint NOT NULL DEFAULT 0,  -- maintained by bump_followers_count
   created_at      timestamptz NOT NULL DEFAULT now(),
   updated_at      timestamptz NOT NULL DEFAULT now()
 );
 
--- A follow is not an edit: only bump updated_at when the counter did not move.
 CREATE TRIGGER set_updated_at
 BEFORE UPDATE ON profiles
 FOR EACH ROW
-WHEN (OLD.followers_count = NEW.followers_count)
 EXECUTE FUNCTION update_updated_at_column();
 
 CREATE INDEX idx_profiles_name ON profiles (name);
+
+-- Counters live apart from profiles so a follow rewrites this small row, not the profile
+-- (Postgres updates copy the whole row). Rows appear on first follow; reads LEFT JOIN.
+CREATE TABLE profile_stats (
+  user_id         uuid PRIMARY KEY REFERENCES profiles (user_id) ON DELETE CASCADE,
+  followers_count bigint NOT NULL DEFAULT 0
+);
 
 -- Row trigger (not application code) so cascade deletes of users keep the count honest.
 CREATE FUNCTION bump_followers_count()
 RETURNS TRIGGER AS $$
 BEGIN
     IF TG_OP = 'INSERT' THEN
-        UPDATE profiles SET followers_count = followers_count + 1 WHERE user_id = NEW.followee_id;
+        INSERT INTO profile_stats (user_id, followers_count) VALUES (NEW.followee_id, 1)
+        ON CONFLICT (user_id) DO UPDATE SET followers_count = profile_stats.followers_count + 1;
     ELSE
-        UPDATE profiles SET followers_count = followers_count - 1 WHERE user_id = OLD.followee_id;
+        UPDATE profile_stats SET followers_count = followers_count - 1 WHERE user_id = OLD.followee_id;
     END IF;
     RETURN NULL;
 END;

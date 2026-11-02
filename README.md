@@ -36,6 +36,8 @@ All endpoints are under the `/api/v1` path.
 - `GET /articles/feed` - Get a feed of articles, sorted by most recently posted
   - If you're logged in and follow anyone, you only get the articles from those you follow
     (your own excluded). Anonymous viewers and users who follow nobody get every article.
+  - Following someone backfills their latest 100 articles into your feed; newer ones arrive as
+    they are published (fan-out on write).
   - Query: `?size=` (default 20, max 100) and `?cursor=` (the `next_cursor` of the previous
     page). A malformed cursor or size is `400`.
   - Returns `{"articles": [...], "pagination": {"next_cursor", "has_more", "size"}}`.
@@ -76,6 +78,10 @@ All endpoints are under the `/api/v1` path.
 
 - `__Host-session` (15 min) is sent on every request; `__Host-refresh` (7 days) is only
   used by `POST /users/token`, which rotates both cookies.
+- Expired sessions are deleted by a `pg_cron` job (`sweep-sessions`, every 5 min) installed by
+  the migrations. The dev container (`db/Containerfile`, started by `just pg-up`) ships it;
+  production Postgres needs `shared_preload_libraries = 'pg_cron'` and `cron.database_name` set
+  to the app database.
 - Replaying a refresh token that has already been rotated revokes the whole session. Clients
   must not call `/users/token` concurrently.
 - Login throttling never locks an account. Failed logins are rate-limited per email (5 per

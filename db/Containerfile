@@ -1,0 +1,6 @@
+# Dev Postgres with pg_cron (sweeps expired sessions; see migrations/0001_user.up.sql).
+# Run with: -c shared_preload_libraries=pg_cron -c cron.database_name=<app db>
+FROM docker.io/library/postgres:18
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends postgresql-18-cron \
+ && rm -rf /var/lib/apt/lists/*

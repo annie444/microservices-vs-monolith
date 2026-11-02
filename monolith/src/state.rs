@@ -249,13 +249,6 @@ impl AppState {
         Ok(result.rows_affected() > 0)
     }
 
-    pub async fn delete_expired_sessions(&self) -> sqlx::Result<u64> {
-        let result = sqlx::query!("DELETE FROM sessions WHERE expires_at < now()")
-            .execute(&self.db)
-            .await?;
-        Ok(result.rows_affected())
-    }
-
     /// A profile as seen by `viewer` (`None` = anonymous, so `following` is false).
     pub async fn get_profile(
         &self,
@@ -265,9 +258,11 @@ impl AppState {
         sqlx::query_as!(
             Profile,
             r#"
-                SELECT p.user_id AS id, p.name, p.pronouns, p.bio, p.followers_count,
+                SELECT p.user_id AS id, p.name, p.pronouns, p.bio,
+                       coalesce(s.followers_count, 0) AS "followers_count!",
                        EXISTS (SELECT 1 FROM follows WHERE follower_id = $2 AND followee_id = p.user_id) AS "following!"
                 FROM profiles p
+                LEFT JOIN profile_stats s ON s.user_id = p.user_id
                 WHERE p.user_id = $1
             "#,
             user_id,
@@ -291,7 +286,8 @@ impl AppState {
                 UPDATE profiles
                 SET name = $2, pronouns = $3, bio = $4
                 WHERE user_id = $1
-                RETURNING user_id AS id, name, pronouns, bio, followers_count,
+                RETURNING user_id AS id, name, pronouns, bio,
+                          coalesce((SELECT followers_count FROM profile_stats WHERE user_id = $1), 0) AS "followers_count!",
                           false AS "following!"
             "#,
             user_id,
@@ -311,25 +307,17 @@ impl AppState {
         before: Uuid,
         limit: i64,
     ) -> sqlx::Result<Vec<FeedArticle>> {
-        // Followee branch: the newest `limit` ids per followee straight off
-        // idx_articles_creator_id (creator_id, id DESC), merged by a top-N sort. Cost is
-        // follows x limit index entries, independent of how much history each author has.
+        // Followee branch: one range scan on feed_entries_pkey; the table is filled at publish
+        // and follow time by triggers (fan-out on write, see migrations/0003_article.up.sql).
         // Global branch: its NOT EXISTS guard is uncorrelated, so Postgres evaluates it once
         // and skips the branch (One-Time Filter) for anyone who follows someone.
-        // ponytail: ceiling is a few thousand follows per viewer; past that, fan-out on write
-        // (a feed_entries table filled at publish time) turns the read into one range scan.
         let rows = sqlx::query_as!(
             ArticleRow,
             r#"
                 WITH page AS (
-                    (SELECT a.id FROM follows f
-                     JOIN LATERAL (
-                         SELECT id FROM articles
-                         WHERE creator_id = f.followee_id AND id < $2
-                         ORDER BY id DESC LIMIT $3
-                     ) a ON true
-                     WHERE f.follower_id = $1
-                     ORDER BY a.id DESC LIMIT $3)
+                    (SELECT article_id AS id FROM feed_entries
+                     WHERE user_id = $1 AND article_id < $2
+                     ORDER BY article_id DESC LIMIT $3)
                     UNION ALL
                     (SELECT id FROM articles
                      WHERE id < $2 AND NOT EXISTS (SELECT 1 FROM follows WHERE follower_id = $1)
@@ -629,8 +617,10 @@ impl AppState {
                     INSERT INTO follows (follower_id, followee_id) VALUES ($1, $2)
                     ON CONFLICT DO NOTHING RETURNING 1
                 )
-                SELECT followers_count + (SELECT count(*) FROM ins) AS "followers_count!"
-                FROM profiles WHERE user_id = $2
+                SELECT coalesce(s.followers_count, 0) + (SELECT count(*) FROM ins) AS "followers_count!"
+                FROM profiles p
+                LEFT JOIN profile_stats s ON s.user_id = p.user_id
+                WHERE p.user_id = $2
             "#,
             follower_id,
             followee_id
@@ -651,8 +641,10 @@ impl AppState {
                 WITH del AS (
                     DELETE FROM follows WHERE follower_id = $1 AND followee_id = $2 RETURNING 1
                 )
-                SELECT followers_count - (SELECT count(*) FROM del) AS "followers_count!"
-                FROM profiles WHERE user_id = $2
+                SELECT coalesce(s.followers_count, 0) - (SELECT count(*) FROM del) AS "followers_count!"
+                FROM profiles p
+                LEFT JOIN profile_stats s ON s.user_id = p.user_id
+                WHERE p.user_id = $2
             "#,
             follower_id,
             followee_id

@@ -40,6 +40,7 @@ pg-up:
     fi
 
     if ! podman container exists "{{ prefix }}-pg"; then
+        podman build -q -t "{{ prefix }}-pg" db/
         podman run \
             --rm \
             --detach \
@@ -54,7 +55,9 @@ pg-up:
             --hostname "{{ prefix }}-pg" \
             --name "{{ prefix }}-pg" \
             --volume "{{ prefix }}-pg-data:/var/lib/postgresql" \
-            docker.io/library/postgres:18-alpine
+            "{{ prefix }}-pg" \
+            -c shared_preload_libraries=pg_cron \
+            -c cron.database_name="{{ pg_db }}"
     fi
 
 pg-down: (_down "pg")

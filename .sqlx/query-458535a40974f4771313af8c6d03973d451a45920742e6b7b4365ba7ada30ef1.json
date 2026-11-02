@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT p.user_id AS id, p.name, p.pronouns, p.bio, p.followers_count,\n                       EXISTS (SELECT 1 FROM follows WHERE follower_id = $2 AND followee_id = p.user_id) AS \"following!\"\n                FROM profiles p\n                WHERE p.user_id = $1\n            ",
+  "query": "\n                UPDATE profiles\n                SET name = $2, pronouns = $3, bio = $4\n                WHERE user_id = $1\n                RETURNING user_id AS id, name, pronouns, bio,\n                          coalesce((SELECT followers_count FROM profile_stats WHERE user_id = $1), 0) AS \"followers_count!\",\n                          false AS \"following!\"\n            ",
   "describe": {
     "columns": [
       {
@@ -49,14 +49,9 @@
       },
       {
         "ordinal": 4,
-        "name": "followers_count",
+        "name": "followers_count!",
         "type_info": "Int8",
-        "origin": {
-          "Table": {
-            "table": "profiles",
-            "name": "followers_count"
-          }
-        }
+        "origin": "Expression"
       },
       {
         "ordinal": 5,
@@ -68,7 +63,9 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Uuid"
+        "Text",
+        "Text",
+        "Text"
       ]
     },
     "nullable": [
@@ -76,9 +73,9 @@
       false,
       true,
       true,
-      false,
+      null,
       null
     ]
   },
-  "hash": "3ebe596b4e10ee121780c16568b4f07d4dec2a1c502eef8a1817252c1905889b"
+  "hash": "458535a40974f4771313af8c6d03973d451a45920742e6b7b4365ba7ada30ef1"
 }

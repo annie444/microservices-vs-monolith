@@ -215,6 +215,14 @@ mod tests {
         ));
 
         let count = |r: Result<Json<FollowersCount>, AppError>| r.unwrap().0.followers_count;
+        // xmin changes whenever a row version is written; the profile row must stay put.
+        let xmin_b = sqlx::query_scalar!(
+            r#"SELECT xmin::text AS "xmin!" FROM profiles WHERE user_id = $1"#,
+            b
+        )
+        .fetch_one(&state.db)
+        .await
+        .unwrap();
         assert_eq!(count(follow(st.clone(), AuthUser(a), Path(b)).await), 1);
         assert_eq!(
             count(follow(st.clone(), AuthUser(a), Path(b)).await),
@@ -222,6 +230,17 @@ mod tests {
             "idempotent"
         );
         assert_eq!(count(follow(st.clone(), AuthUser(b), Path(a)).await), 1);
+        assert_eq!(
+            sqlx::query_scalar!(
+                r#"SELECT xmin::text AS "xmin!" FROM profiles WHERE user_id = $1"#,
+                b
+            )
+            .fetch_one(&state.db)
+            .await
+            .unwrap(),
+            xmin_b,
+            "following must not rewrite the profile row"
+        );
         assert!(matches!(
             follow(st.clone(), AuthUser(a), Path(a)).await,
             Err(AppError::Unprocessable(_))

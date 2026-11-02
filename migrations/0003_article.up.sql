@@ -61,3 +61,53 @@ CREATE TRIGGER bump_favorites_count
 AFTER INSERT OR DELETE ON article_favorites
 FOR EACH ROW
 EXECUTE FUNCTION bump_favorites_count();
+
+-- Fan-out on write: each follower's feed is materialized here at publish and follow time, so a
+-- feed page is one range scan on the primary key. No index on article_id: it would double the
+-- fan-out write cost to speed up a cascade (article deletion) that has no endpoint.
+-- ponytail: publish cost grows with the author's follower count; go hybrid (pull for celebrity
+-- authors) if publish latency matters.
+CREATE TABLE feed_entries (
+  user_id    uuid NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  article_id uuid NOT NULL REFERENCES articles (id) ON DELETE CASCADE,
+  PRIMARY KEY (user_id, article_id)
+);
+
+CREATE FUNCTION fan_out_article()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO feed_entries (user_id, article_id)
+    SELECT follower_id, NEW.id FROM follows WHERE followee_id = NEW.creator_id
+    ON CONFLICT DO NOTHING;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER fan_out_article
+AFTER INSERT ON articles
+FOR EACH ROW
+EXECUTE FUNCTION fan_out_article();
+
+-- Following backfills the author's latest 100 articles; unfollowing removes all of theirs.
+CREATE FUNCTION sync_feed_on_follow()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        INSERT INTO feed_entries (user_id, article_id)
+        SELECT NEW.follower_id, id FROM articles
+        WHERE creator_id = NEW.followee_id
+        ORDER BY id DESC LIMIT 100
+        ON CONFLICT DO NOTHING;
+    ELSE
+        DELETE FROM feed_entries
+        WHERE user_id = OLD.follower_id
+          AND article_id IN (SELECT id FROM articles WHERE creator_id = OLD.followee_id);
+    END IF;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER sync_feed_on_follow
+AFTER INSERT OR DELETE ON follows
+FOR EACH ROW
+EXECUTE FUNCTION sync_feed_on_follow();

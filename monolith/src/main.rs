@@ -1,9 +1,8 @@
 use std::net::SocketAddr;
-use std::time::Duration;
 
 use anyhow::Context;
 use tokio::{net::TcpListener, signal};
-use tracing::{info, warn};
+use tracing::info;
 
 mod auth;
 mod config;
@@ -29,20 +28,8 @@ async fn main() -> anyhow::Result<()> {
         .context("Unable to bind listener")?;
     info!("Listening on {}", listener.local_addr()?);
 
-    // ponytail: single-process sweeper; move to pg_cron if more than one instance runs
-    let sweeper = state.clone();
-    tokio::spawn(async move {
-        let mut tick = tokio::time::interval(Duration::from_secs(300));
-        loop {
-            tick.tick().await;
-            sweeper.email_limiter.prune();
-            sweeper.ip_limiter.prune();
-            if let Err(e) = sweeper.delete_expired_sessions().await {
-                warn!(error = %e, "session sweep failed");
-            }
-        }
-    });
-
+    // Expired sessions are swept by pg_cron (migrations/0001_user.up.sql); the login limiters
+    // prune themselves as they grow.
     let app = router::init(state).into_make_service_with_connect_info::<SocketAddr>();
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())

@@ -11,6 +11,10 @@ use axum::http::request::Parts;
 use crate::error::AppError;
 use crate::state::AppState;
 
+/// Entries whose window has ended are dropped once the map grows past this, so memory stays
+/// bounded without a sweeper task.
+const PRUNE_AT: usize = 10_000;
+
 /// Counts failures per key inside a fixed window. `max == 0` disables it.
 // ponytail: global mutex + fixed window per process; shard or move to Redis when multi-instance
 pub struct RateLimiter<K> {
@@ -44,6 +48,9 @@ impl<K: Hash + Eq> RateLimiter<K> {
             return;
         }
         let mut hits = self.hits.lock().unwrap_or_else(PoisonError::into_inner);
+        if hits.len() > PRUNE_AT {
+            Self::prune_locked(&mut hits, self.window);
+        }
         let now = Instant::now();
         let entry = hits.entry(key).or_insert((0, now));
         if now.duration_since(entry.1) >= self.window {
@@ -53,9 +60,8 @@ impl<K: Hash + Eq> RateLimiter<K> {
     }
 
     /// Drops entries whose window has ended.
-    pub fn prune(&self) {
-        let mut hits = self.hits.lock().unwrap_or_else(PoisonError::into_inner);
-        hits.retain(|_, (_, start)| start.elapsed() < self.window);
+    fn prune_locked(hits: &mut HashMap<K, (u32, Instant)>, window: Duration) {
+        hits.retain(|_, (_, start)| start.elapsed() < window);
     }
 }
 
@@ -107,8 +113,19 @@ mod tests {
         assert!(limiter.check(&key).is_none());
         limiter.record(key.clone());
         assert!(limiter.check(&key).is_none(), "window restarted at 1");
-        limiter.prune();
-        assert!(limiter.check(&key).is_none());
+    }
+
+    #[test]
+    fn record_prunes_when_large() {
+        let limiter = RateLimiter::new(5, Duration::from_millis(1));
+        for i in 0..=PRUNE_AT {
+            limiter.record(i);
+        }
+        std::thread::sleep(Duration::from_millis(5));
+        limiter.record(usize::MAX);
+        let hits = limiter.hits.lock().unwrap();
+        assert_eq!(hits.len(), 1, "expired entries were dropped on record");
+        assert!(hits.contains_key(&usize::MAX));
     }
 
     #[test]

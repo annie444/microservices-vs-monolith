@@ -569,8 +569,66 @@ mod tests {
             "own posts, follows nobody: global"
         );
         assert_eq!(as_viewer(None).await, [a2, b1, a1], "anonymous: global");
+
+        // Fan-out on publish, backfill on follow, cleanup on unfollow.
+        let a3 = article(&state, a, "a3").await;
+        assert_eq!(
+            as_viewer(Some(c)).await,
+            [a3, a2, a1],
+            "published after follow"
+        );
+        state.follow(c, b).await.unwrap();
+        assert_eq!(as_viewer(Some(c)).await, [a3, a2, b1, a1], "backfilled b");
+        state.unfollow(c, a).await.unwrap();
+        assert_eq!(as_viewer(Some(c)).await, [b1], "unfollow removed a's");
+        state.unfollow(c, b).await.unwrap();
+        assert_eq!(
+            as_viewer(Some(c)).await,
+            [a3, a2, b1, a1],
+            "follows nobody again: global"
+        );
     }
 
+    #[sqlx::test(migrations = "../migrations")]
+    async fn feed_backfill_limit(db: PgPool) {
+        let state = state(db);
+        let st = State(state.clone());
+        let a = user(&state, "a@b.c", "Ada").await;
+        let c = user(&state, "c@b.c", "Cy").await;
+        sqlx::query!(
+            "INSERT INTO articles (creator_id, title, content) SELECT $1, 't' || g, 'c' FROM generate_series(1, 120) g",
+            a
+        )
+        .execute(&state.db)
+        .await
+        .unwrap();
+        state.follow(c, a).await.unwrap();
+
+        let page = feed(st.clone(), q(None, Some(100)), Some(AuthUser(c)))
+            .await
+            .unwrap()
+            .0;
+        assert_eq!(page.articles.len(), 100);
+        let rest = feed(
+            st.clone(),
+            q(Some(page.pagination.next_cursor), Some(100)),
+            Some(AuthUser(c)),
+        )
+        .await
+        .unwrap()
+        .0;
+        assert!(
+            rest.articles.is_empty(),
+            "only the latest 100 were backfilled"
+        );
+
+        let newest = article(&state, a, "fresh").await;
+        let page = feed(st, q(None, Some(1)), Some(AuthUser(c)))
+            .await
+            .unwrap()
+            .0;
+        assert_eq!(ids(&page), [newest], "fan-out on publish still applies");
+    }
     #[sqlx::test(migrations = "../migrations")]
     async fn article_detail(db: PgPool) {
         let state = state(db);

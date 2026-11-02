@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO articles (creator_id, title, content) SELECT $1, 't' || g, 'c' FROM generate_series(1, 120) g",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "69f9610fe9d19087366e604c8a75f1f93019ab7d4a6d840858feb82bab39ab04"
+}
