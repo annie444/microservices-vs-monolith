@@ -1,6 +1,0 @@
-{
-  "enableAllProjectMcpServers": true,
-  "enabledMcpJsonServers": [
-    "k6"
-  ]
-}
