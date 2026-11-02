@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT article_id FROM feed_entries WHERE user_id = $1 ORDER BY article_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "article_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "feed_entries",
+            "name": "article_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "61170183e0ab2346658f1aeea0a5a23b553ce705035c61983c37709d64948b23"
+}

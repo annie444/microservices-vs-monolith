@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use axum::extract::FromRef;
 use common::auth::AuthDb;
+use common::profiles::Author;
 use common::throttle::BehindProxy;
 use sqlx::PgPool;
 use tokio::sync::Notify;
@@ -63,6 +64,17 @@ impl AppState {
 
     pub async fn migrate(&self) -> Result<(), sqlx::migrate::MigrateError> {
         sqlx::migrate!("./migrations").run(&self.db).await
+    }
+
+    /// Batch lookup for article-api and comment-api (`GET /internal/profiles?ids=`).
+    pub async fn authors(&self, ids: &[Uuid]) -> sqlx::Result<Vec<Author>> {
+        sqlx::query_as!(
+            Author,
+            "SELECT user_id AS id, name, pronouns FROM profiles WHERE user_id = ANY($1)",
+            ids
+        )
+        .fetch_all(&self.db)
+        .await
     }
 
     /// Called by user-api during registration. `true` if the profile was created now.

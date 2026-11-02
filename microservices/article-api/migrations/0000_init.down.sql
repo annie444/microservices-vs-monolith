@@ -1,0 +1,11 @@
+DROP TABLE feed_entries;
+DROP FUNCTION sync_feed_on_follow();
+DROP FUNCTION fan_out_article();
+DROP TABLE follows;
+DROP TABLE article_stats;
+DROP FUNCTION bump_favorites_count();
+DROP TABLE article_favorites;
+DROP TABLE article_tags;
+DROP TABLE tags;
+DROP TABLE articles;
+DROP FUNCTION update_updated_at_column();

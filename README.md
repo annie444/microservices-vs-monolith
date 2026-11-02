@@ -139,3 +139,24 @@ Port 8202, database `profile_api`, env prefix `PROFILE_API_`. Serves the Profile
 plus `POST /internal/profiles` for user-api. Needs an `auth_db` pool into `user_api` as
 `session_verifier` (8 connections by default). The micro cluster runs with
 `max_connections = 300` so four services with two pools each fit.
+- `GET /internal/profiles?ids=<uuid>,<uuid>` on profile-api → `[{"id", "name", "pronouns"}]`
+  (unknown ids omitted; at most 100 ids). article-api and comment-api call it once per read
+  request for the page's distinct authors.
+
+### article-api
+
+Port 8203, database `article_api`, env prefix `ARTICLE_API_`. Serves the Articles API unchanged.
+It keeps a replica of the follow graph (`follows`) fed only by `POST /internal/follow-events`
+from profile-api's outbox, and runs the same fan-out/backfill triggers as the monolith on top of
+it, so feeds are eventually consistent with follows (normally within a second). Author names are
+fetched from profile-api on every read; if profile-api is down, non-empty reads are `502`.
+- `GET /internal/articles/{id}` on article-api → `{"id", "creator_id"}` or `404`. comment-api
+  calls it when creating a comment, when a comment page is empty (to tell "no comments" from
+  "no article"), and when someone other than a comment's author tries to delete it (article
+  owners may).
+
+### comment-api
+
+Port 8204, database `comment_api`, env prefix `COMMENT_API_`. Serves the Comments API unchanged.
+Author names come from profile-api per read; article existence and ownership from article-api
+on the paths above. Author edits and author deletes need neither hop.

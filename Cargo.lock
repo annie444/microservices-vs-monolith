@@ -44,6 +44,18 @@ checksum = "7d902e3d592a523def97af8f317b08ce16b7ab854c1985a0c671e6f15cebc236"
 [[package]]
 name = "article-api"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "common",
+ "serde",
+ "sqlx",
+ "time",
+ "tokio",
+ "tower-http 0.7.1",
+ "tracing",
+ "uuid",
+]
 
 [[package]]
 name = "async-trait"
@@ -266,6 +278,18 @@ checksum = "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a"
 [[package]]
 name = "comment-api"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "common",
+ "serde",
+ "sqlx",
+ "time",
+ "tokio",
+ "tower-http 0.7.1",
+ "tracing",
+ "uuid",
+]
 
 [[package]]
 name = "common"
@@ -275,6 +299,7 @@ dependencies = [
  "axum",
  "axum-extra",
  "config",
+ "reqwest",
  "serde",
  "sha2 0.11.1",
  "sqlx",

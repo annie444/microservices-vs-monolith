@@ -1,0 +1,22 @@
+[server]
+listen = "0.0.0.0"
+port = 8204
+# behind_proxy = true
+
+[db]
+# Overridable with COMMENT_API_DB__URL.
+url = "postgres://postgres:postgres@localhost:5433/comment_api"
+# max_connections = 20
+
+# Session verification: the user database, as the role that can only call verify_session().
+[auth_db]
+url = "postgres://session_verifier:verifier@localhost:5433/user_api"
+max_connections = 8
+
+# Author names (GET /internal/profiles?ids=).
+[profile_api]
+url = "http://localhost:8202"
+
+# Article existence and ownership (GET /internal/articles/{id}).
+[article_api]
+url = "http://localhost:8203"

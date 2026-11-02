@@ -20,7 +20,10 @@ pub fn init(state: AppState) -> Router {
             post(profile::follow).delete(profile::unfollow),
         )
         // Service-to-service only; the gateway must not route /internal.
-        .route("/internal/profiles", post(profile::create_internal))
+        .route(
+            "/internal/profiles",
+            post(profile::create_internal).get(profile::authors_internal),
+        )
         .layer(DefaultBodyLimit::max(16 * 1024))
         .layer(
             TraceLayer::new_for_http()

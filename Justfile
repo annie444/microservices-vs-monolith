@@ -127,7 +127,13 @@ pg-micro-clean: (_clean "pg-micro")
 pg-micro-logs: (_logs "pg-micro")
 
 run-user-api:
-    cd microservices/user-api && cargo run
+    cd microservices/user-api && cargo run -p user-api
 
 run-profile-api:
-    cd microservices/profile-api && cargo run
+    cd microservices/profile-api && cargo run -p profile-api
+
+run-article-api:
+    cd microservices/article-api && cargo run
+
+run-comment-api:
+    cd microservices/comment-api && cargo run

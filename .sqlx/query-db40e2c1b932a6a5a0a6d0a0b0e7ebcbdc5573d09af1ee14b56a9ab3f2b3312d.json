@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM article_favorites WHERE user_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "db40e2c1b932a6a5a0a6d0a0b0e7ebcbdc5573d09af1ee14b56a9ab3f2b3312d"
+}

@@ -1,7 +1,8 @@
-use axum::extract::{Json, Path, State};
+use axum::extract::{Json, Path, Query, State};
 use axum::http::StatusCode;
 use common::auth::AuthUser;
 use common::error::AppError;
+use common::profiles::Author;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -148,6 +149,31 @@ pub async fn unfollow(
     Ok(Json(FollowersCount {
         followers_count: count,
     }))
+}
+
+/// `?ids=<uuid>,<uuid>,...`, at most 100.
+#[derive(Deserialize)]
+pub struct IdsQuery {
+    pub ids: String,
+}
+
+/// Internal: author names for article-api / comment-api. Unknown ids are simply omitted.
+#[tracing::instrument(skip_all)]
+pub async fn authors_internal(
+    State(state): State<AppState>,
+    Query(query): Query<IdsQuery>,
+) -> Result<Json<Vec<Author>>, AppError> {
+    let ids = query
+        .ids
+        .split(',')
+        .filter(|s| !s.is_empty())
+        .map(|s| s.trim().parse::<Uuid>())
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| AppError::Unprocessable("invalid id"))?;
+    if ids.len() > 100 {
+        return Err(AppError::Unprocessable("at most 100 ids"));
+    }
+    Ok(Json(state.authors(&ids).await?))
 }
 
 /// Internal: creates the profile for a freshly registered user. `201` when created, `200` when
@@ -325,6 +351,40 @@ mod tests {
             ],
             "one outbox event per change, in order, cascades included"
         );
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn authors_internal_lookup(db: PgPool) {
+        let state = state(db);
+        let st = State(state.clone());
+        let a = user(&state, "Ada").await;
+        let b = user(&state, "Bob").await;
+        let ids = |s: String| Query(IdsQuery { ids: s });
+
+        let mut got = authors_internal(st.clone(), ids(format!("{a},{b},{}", Uuid::nil())))
+            .await
+            .unwrap()
+            .0;
+        got.sort_by(|x, y| x.name.cmp(&y.name));
+        let names: Vec<(Uuid, &str)> = got.iter().map(|x| (x.id, x.name.as_str())).collect();
+        assert_eq!(names, [(a, "Ada"), (b, "Bob")], "unknown id omitted");
+
+        assert!(
+            authors_internal(st.clone(), ids(String::new()))
+                .await
+                .unwrap()
+                .0
+                .is_empty()
+        );
+        assert!(matches!(
+            authors_internal(st.clone(), ids("not-a-uuid".into())).await,
+            Err(AppError::Unprocessable(_))
+        ));
+        let many = vec![Uuid::nil().to_string(); 101].join(",");
+        assert!(matches!(
+            authors_internal(st, ids(many)).await,
+            Err(AppError::Unprocessable(_))
+        ));
     }
 
     #[sqlx::test(migrations = "./migrations")]
