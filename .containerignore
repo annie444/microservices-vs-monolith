@@ -1,0 +1,10 @@
+.git/
+.env*
+*.local
+.claude/
+.serena/
+.mcp.json
+*.md
+dist/
+node_modules/
+target/

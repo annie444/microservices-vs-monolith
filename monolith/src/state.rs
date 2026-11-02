@@ -262,13 +262,10 @@ impl AppState {
         user_id: Uuid,
         viewer: Option<Uuid>,
     ) -> sqlx::Result<Option<Profile>> {
-        // ponytail: count(*) per read via idx_follows_followee_id; denormalize
-        // profiles.followers_count if celebrity profiles show up in the benchmark
         sqlx::query_as!(
             Profile,
             r#"
-                SELECT p.user_id AS id, p.name, p.pronouns, p.bio,
-                       (SELECT count(*) FROM follows WHERE followee_id = p.user_id) AS "followers_count!",
+                SELECT p.user_id AS id, p.name, p.pronouns, p.bio, p.followers_count,
                        EXISTS (SELECT 1 FROM follows WHERE follower_id = $2 AND followee_id = p.user_id) AS "following!"
                 FROM profiles p
                 WHERE p.user_id = $1
@@ -294,8 +291,7 @@ impl AppState {
                 UPDATE profiles
                 SET name = $2, pronouns = $3, bio = $4
                 WHERE user_id = $1
-                RETURNING user_id AS id, name, pronouns, bio,
-                          (SELECT count(*) FROM follows WHERE followee_id = $1) AS "followers_count!",
+                RETURNING user_id AS id, name, pronouns, bio, followers_count,
                           false AS "following!"
             "#,
             user_id,
@@ -342,7 +338,7 @@ impl AppState {
                 SELECT a.id, a.title, a.subtitle, NULL::text AS content, a.created_at, a.updated_at,
                        p.user_id AS creator_id, p.name AS creator_name, p.pronouns AS creator_pronouns,
                        (SELECT coalesce(array_agg(tag ORDER BY tag), '{}') FROM article_tags WHERE article_id = a.id) AS "tags!: Vec<String>",
-                       (SELECT count(*) FROM article_favorites WHERE article_id = a.id) AS "favorites!",
+                       a.favorites_count AS favorites,
                        EXISTS (SELECT 1 FROM article_favorites WHERE article_id = a.id AND user_id = $1) AS "favorited!"
                 FROM page
                 JOIN articles a ON a.id = page.id
@@ -370,7 +366,7 @@ impl AppState {
                 SELECT a.id, a.title, a.subtitle, a.content AS "content?", a.created_at, a.updated_at,
                        p.user_id AS creator_id, p.name AS creator_name, p.pronouns AS creator_pronouns,
                        (SELECT coalesce(array_agg(tag ORDER BY tag), '{}') FROM article_tags WHERE article_id = a.id) AS "tags!: Vec<String>",
-                       (SELECT count(*) FROM article_favorites WHERE article_id = a.id) AS "favorites!",
+                       a.favorites_count AS favorites,
                        EXISTS (SELECT 1 FROM article_favorites WHERE article_id = a.id AND user_id = $1) AS "favorited!"
                 FROM articles a
                 JOIN profiles p ON p.user_id = a.creator_id
@@ -461,14 +457,16 @@ impl AppState {
     /// Idempotent; returns the article's favorite count after the insert. An unknown
     /// `article_id` surfaces as a foreign-key violation.
     pub async fn favorite(&self, article_id: Uuid, user_id: Uuid) -> sqlx::Result<i64> {
+        // favorites_count is bumped by a trigger, but this statement's snapshot cannot see
+        // that, so the inserted row (0 or 1) is added back from RETURNING.
         sqlx::query_scalar!(
             r#"
                 WITH ins AS (
                     INSERT INTO article_favorites (article_id, user_id) VALUES ($1, $2)
                     ON CONFLICT DO NOTHING RETURNING 1
                 )
-                SELECT (SELECT count(*) FROM article_favorites WHERE article_id = $1)
-                     + (SELECT count(*) FROM ins) AS "favorites!"
+                SELECT favorites_count + (SELECT count(*) FROM ins) AS "favorites!"
+                FROM articles WHERE id = $1
             "#,
             article_id,
             user_id
@@ -485,8 +483,7 @@ impl AppState {
                 WITH del AS (
                     DELETE FROM article_favorites WHERE article_id = $1 AND user_id = $2 RETURNING 1
                 )
-                SELECT (SELECT count(*) FROM article_favorites WHERE article_id = $1)
-                     - (SELECT count(*) FROM del) AS "favorites!"
+                SELECT favorites_count - (SELECT count(*) FROM del) AS "favorites!"
                 FROM articles WHERE id = $1
             "#,
             article_id,
@@ -618,16 +615,16 @@ impl AppState {
     /// Idempotent; returns the followee's follower count after the insert. An unknown
     /// `followee_id` surfaces as a foreign-key violation.
     pub async fn follow(&self, follower_id: Uuid, followee_id: Uuid) -> sqlx::Result<i64> {
-        // The count subquery runs on the statement's snapshot and cannot see the CTE's own
-        // insert, so the inserted row (0 or 1) is added back from RETURNING.
+        // followers_count is bumped by a trigger, but this statement's snapshot cannot see
+        // that, so the inserted row (0 or 1) is added back from RETURNING.
         sqlx::query_scalar!(
             r#"
                 WITH ins AS (
                     INSERT INTO follows (follower_id, followee_id) VALUES ($1, $2)
                     ON CONFLICT DO NOTHING RETURNING 1
                 )
-                SELECT (SELECT count(*) FROM follows WHERE followee_id = $2)
-                     + (SELECT count(*) FROM ins) AS "followers_count!"
+                SELECT followers_count + (SELECT count(*) FROM ins) AS "followers_count!"
+                FROM profiles WHERE user_id = $2
             "#,
             follower_id,
             followee_id
@@ -648,8 +645,7 @@ impl AppState {
                 WITH del AS (
                     DELETE FROM follows WHERE follower_id = $1 AND followee_id = $2 RETURNING 1
                 )
-                SELECT (SELECT count(*) FROM follows WHERE followee_id = $2)
-                     - (SELECT count(*) FROM del) AS "followers_count!"
+                SELECT followers_count - (SELECT count(*) FROM del) AS "followers_count!"
                 FROM profiles WHERE user_id = $2
             "#,
             follower_id,

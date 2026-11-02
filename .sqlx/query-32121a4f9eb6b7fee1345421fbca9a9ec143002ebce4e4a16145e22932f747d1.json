@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT a.id, a.title, a.subtitle, a.content AS \"content?\", a.created_at, a.updated_at,\n                       p.user_id AS creator_id, p.name AS creator_name, p.pronouns AS creator_pronouns,\n                       (SELECT coalesce(array_agg(tag ORDER BY tag), '{}') FROM article_tags WHERE article_id = a.id) AS \"tags!: Vec<String>\",\n                       (SELECT count(*) FROM article_favorites WHERE article_id = a.id) AS \"favorites!\",\n                       EXISTS (SELECT 1 FROM article_favorites WHERE article_id = a.id AND user_id = $1) AS \"favorited!\"\n                FROM articles a\n                JOIN profiles p ON p.user_id = a.creator_id\n                WHERE a.id = $2\n            ",
+  "query": "\n                WITH page AS (\n                    (SELECT a.id FROM follows f\n                     JOIN LATERAL (\n                         SELECT id FROM articles\n                         WHERE creator_id = f.followee_id AND id < $2\n                         ORDER BY id DESC LIMIT $3\n                     ) a ON true\n                     WHERE f.follower_id = $1\n                     ORDER BY a.id DESC LIMIT $3)\n                    UNION ALL\n                    (SELECT id FROM articles\n                     WHERE id < $2 AND NOT EXISTS (SELECT 1 FROM follows WHERE follower_id = $1)\n                     ORDER BY id DESC LIMIT $3)\n                )\n                SELECT a.id, a.title, a.subtitle, NULL::text AS content, a.created_at, a.updated_at,\n                       p.user_id AS creator_id, p.name AS creator_name, p.pronouns AS creator_pronouns,\n                       (SELECT coalesce(array_agg(tag ORDER BY tag), '{}') FROM article_tags WHERE article_id = a.id) AS \"tags!: Vec<String>\",\n                       a.favorites_count AS favorites,\n                       EXISTS (SELECT 1 FROM article_favorites WHERE article_id = a.id AND user_id = $1) AS \"favorited!\"\n                FROM page\n                JOIN articles a ON a.id = page.id\n                JOIN profiles p ON p.user_id = a.creator_id\n                ORDER BY a.id DESC\n                LIMIT $3\n            ",
   "describe": {
     "columns": [
       {
@@ -38,14 +38,9 @@
       },
       {
         "ordinal": 3,
-        "name": "content?",
+        "name": "content",
         "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "articles",
-            "name": "content"
-          }
-        }
+        "origin": "Expression"
       },
       {
         "ordinal": 4,
@@ -110,9 +105,14 @@
       },
       {
         "ordinal": 10,
-        "name": "favorites!",
+        "name": "favorites",
         "type_info": "Int8",
-        "origin": "Expression"
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "favorites_count"
+          }
+        }
       },
       {
         "ordinal": 11,
@@ -124,23 +124,24 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Uuid"
+        "Uuid",
+        "Int8"
       ]
     },
     "nullable": [
       false,
       false,
       true,
-      false,
+      null,
       false,
       false,
       false,
       false,
       true,
       null,
-      null,
+      false,
       null
     ]
   },
-  "hash": "64900557a67f1d99ba0d425a3a2c443d33272c81293493b86e0cbe1665e835cd"
+  "hash": "32121a4f9eb6b7fee1345421fbca9a9ec143002ebce4e4a16145e22932f747d1"
 }

@@ -1,7 +1,7 @@
 use std::net::IpAddr;
 
 use anyhow::Context;
-use config::Config;
+use config::{Config, Environment, File};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -17,9 +17,10 @@ impl AppConfig {
     /// env vars; `DATABASE_URL` (already required by the sqlx macros) wins for `db.url`.
     pub fn load() -> anyhow::Result<Self> {
         Config::builder()
-            .add_source(config::File::with_name("config").required(false))
+            .add_source(File::with_name("config").required(false))
+            .add_source(File::with_name("/app/config").required(false))
             .add_source(
-                config::Environment::with_prefix("MONOLITH")
+                Environment::with_prefix("MONOLITH")
                     .prefix_separator("_")
                     .separator("__"),
             )

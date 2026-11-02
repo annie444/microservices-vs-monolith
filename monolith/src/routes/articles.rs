@@ -380,14 +380,24 @@ mod tests {
             .unwrap()
             .0;
         assert_eq!((art.favorites, art.favorited), (2, true));
+        assert_eq!(art.updated_at, art.created_at, "favoriting is not an edit");
+
+        // The counter is kept by a trigger, so it also tracks cascade deletes.
+        sqlx::query!("DELETE FROM users WHERE id = $1", b)
+            .execute(&state.db)
+            .await
+            .unwrap();
+        let art = get_article(st.clone(), None, Path(id)).await.unwrap().0;
+        assert_eq!(art.favorites, 1, "cascade delete decremented the counter");
+        assert_eq!(count(favorite(st.clone(), AuthUser(a), Path(id)).await), 1);
 
         assert_eq!(
             count(unfavorite(st.clone(), AuthUser(a), Path(id)).await),
-            1
+            0
         );
         assert_eq!(
             count(unfavorite(st.clone(), AuthUser(a), Path(id)).await),
-            1,
+            0,
             "idempotent"
         );
         assert!(matches!(

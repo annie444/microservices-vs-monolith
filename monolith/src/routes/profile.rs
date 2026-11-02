@@ -247,6 +247,19 @@ mod tests {
             Err(AppError::NotFound(_))
         ));
 
+        // The counter is kept by a trigger, so it also tracks cascade deletes.
+        let c = user(&state, "c@b.c", "Cy").await;
+        assert_eq!(count(follow(st.clone(), AuthUser(c), Path(b)).await), 2);
+        sqlx::query!("DELETE FROM users WHERE id = $1", c)
+            .execute(&state.db)
+            .await
+            .unwrap();
+        let p = get_profile(st.clone(), None, Path(b)).await.unwrap().0;
+        assert_eq!(
+            p.followers_count, 1,
+            "cascade delete decremented the counter"
+        );
+
         assert!(
             get_profile(st.clone(), Some(AuthUser(a)), Path(b))
                 .await
