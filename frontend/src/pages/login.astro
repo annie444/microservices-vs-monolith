@@ -1,0 +1,52 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Log in">
+	<form id="login">
+		<h1>Log in</h1>
+		<input name="email" type="email" required autocomplete="email" placeholder="Email" />
+		<input
+			name="password"
+			type="password"
+			required
+			autocomplete="current-password"
+			placeholder="Password"
+		/>
+		<button>Log in</button>
+		<p class="error"></p>
+	</form>
+
+	<form id="register">
+		<h2>New here? Register</h2>
+		<input name="name" required maxlength="100" autocomplete="name" placeholder="Display name" />
+		<input name="email" type="email" required autocomplete="email" placeholder="Email" />
+		<input
+			name="password"
+			type="password"
+			required
+			autocomplete="new-password"
+			placeholder="Password"
+		/>
+		<button>Register</button>
+		<p class="error"></p>
+	</form>
+</Layout>
+
+<script>
+	import { $, api, onSubmit } from '../lib/api';
+
+	const login = (data: Record<string, string>) =>
+		api('/users/login', { method: 'POST', json: { email: data.email, password: data.password } });
+	const home = () => location.assign('/');
+
+	onSubmit($<HTMLFormElement>('#login'), login, home);
+	onSubmit(
+		$<HTMLFormElement>('#register'),
+		async (data) => {
+			await api('/users/register', { method: 'POST', json: data });
+			await login(data);
+		},
+		home,
+	);
+</script>

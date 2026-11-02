@@ -137,3 +137,6 @@ run-article-api:
 
 run-comment-api:
     cd microservices/comment-api && cargo run
+
+run-frontend:
+    cd frontend && pnpm dev

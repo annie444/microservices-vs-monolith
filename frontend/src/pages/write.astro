@@ -1,0 +1,49 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Write">
+	<form id="write">
+		<h1 id="heading">New article</h1>
+		<input name="title" required maxlength="200" placeholder="Title" />
+		<input name="subtitle" maxlength="300" placeholder="Subtitle (optional)" />
+		<input name="tags" placeholder="Tags, comma separated (up to 10)" />
+		<textarea name="content" rows="16" required maxlength="50000" placeholder="Write…"></textarea>
+		<button>Publish</button>
+		<p class="error"></p>
+	</form>
+</Layout>
+
+<script>
+	import { $, api, qs, me, onSubmit, type Article } from '../lib/api';
+
+	const id = qs('id');
+	const form = $<HTMLFormElement>('#write');
+	const field = (name: string) => form.elements.namedItem(name) as HTMLInputElement;
+
+	if (!(await me())) location.replace('/login');
+
+	if (id) {
+		$('#heading').textContent = 'Edit article';
+		const a = await api<Article>(`/articles/${id}`);
+		field('title').value = a.title;
+		field('subtitle').value = a.subtitle ?? '';
+		field('tags').value = a.tags.join(', ');
+		field('content').value = a.content;
+	}
+
+	onSubmit(
+		form,
+		(data) =>
+			api<Article>(id ? `/articles/${id}` : '/articles/new', {
+				method: id ? 'PUT' : 'POST',
+				json: {
+					title: data.title,
+					subtitle: data.subtitle || null,
+					content: data.content,
+					tags: data.tags.split(',').map((t) => t.trim()).filter(Boolean),
+				},
+			}),
+		(a) => location.assign(`/article?id=${a.id}`),
+	);
+</script>

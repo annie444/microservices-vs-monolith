@@ -160,3 +160,12 @@ fetched from profile-api on every read; if profile-api is down, non-empty reads 
 Port 8204, database `comment_api`, env prefix `COMMENT_API_`. Serves the Comments API unchanged.
 Author names come from profile-api per read; article existence and ownership from article-api
 on the paths above. Author edits and author deletes need neither hop.
+
+## Frontend
+
+`frontend/` is a minimal Astro site (static pages, client-side `fetch`) that works against either
+stack because both serve the same `/api/v1` contract. `just run-frontend` starts it on
+http://localhost:4321 proxying `/api` to the monolith; `API_MICRO=1 pnpm dev` in `frontend/` fans
+`/api/v1/{users,profiles,articles,comments}` out to the four services instead. The proxy is not
+optional: the API's `__Host-` cookies only flow on the page's own origin, which in production is
+the gateway's job. See `frontend/README.md`.

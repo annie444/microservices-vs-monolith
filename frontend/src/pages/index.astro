@@ -1,11 +1,51 @@
 ---
-import Welcome from '../components/Welcome.astro';
 import Layout from '../layouts/Layout.astro';
-
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
 ---
 
-<Layout>
-	<Welcome />
+<Layout title="Feed">
+	<h1>Feed</h1>
+	<ul id="feed" class="cards"></ul>
+	<p id="status"></p>
+	<button id="more" hidden>Load more</button>
 </Layout>
+
+<script>
+	import { $, api, esc, when, type Feed } from '../lib/api';
+
+	const list = $('#feed');
+	const more = $<HTMLButtonElement>('#more');
+	const status = $('#status');
+	let cursor: string | null = null;
+
+	async function load() {
+		more.hidden = true;
+		status.textContent = 'Loading…';
+		try {
+			const feed = await api<Feed>(`/articles/feed${cursor ? `?cursor=${cursor}` : ''}`);
+			list.insertAdjacentHTML(
+				'beforeend',
+				feed.articles
+					.map(
+						(a) => `
+				<li class="card">
+					<a href="/article?id=${a.id}"><strong>${esc(a.title)}</strong></a>
+					${a.subtitle ? `<p>${esc(a.subtitle)}</p>` : ''}
+					<small>
+						<a href="/profile?id=${a.creator.id}">${esc(a.creator.name)}</a> · ${when(a.created_at)}
+						· ♥ ${a.favorites}${a.tags.length ? ' · ' + a.tags.map(esc).join(', ') : ''}
+					</small>
+				</li>`,
+					)
+					.join(''),
+			);
+			cursor = feed.pagination.next_cursor;
+			more.hidden = !feed.pagination.has_more;
+			status.textContent = list.children.length ? '' : 'No articles yet.';
+		} catch (e) {
+			status.textContent = (e as Error).message;
+		}
+	}
+
+	more.onclick = load;
+	load();
+</script>
