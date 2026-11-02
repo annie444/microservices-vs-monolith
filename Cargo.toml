@@ -34,6 +34,7 @@ tracing-subscriber = { version = "0.3.23", features = ["fmt", "env-filter"] }
 unicode-normalization = "0.1.26"
 uuid = { version = "1.29.0", features = ["serde"] }
 thiserror = "2.0"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 
 # Both benchmark targets build with the same optimizations.
 [profile.release]

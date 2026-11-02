@@ -88,3 +88,42 @@ _logs name:
     #!/usr/bin/env bash
     {{ debug }}
     podman logs "{{ prefix }}-{{ name }}"
+
+# Microservices Postgres: one cluster on 5433, one database per service (db/micro-init), pg_cron in user_api.
+pg-micro-up:
+    #!/usr/bin/env bash
+    {{ debug }}
+    if ! podman volume exists "{{ prefix }}-pg-micro-data"; then
+        podman volume create "{{ prefix }}-pg-micro-data"
+    fi
+
+    if ! podman container exists "{{ prefix }}-pg-micro"; then
+        podman build -q -t "{{ prefix }}-pg" db/
+        podman run \
+            --rm \
+            --detach \
+            --env "POSTGRES_USER={{ pg_user }}" \
+            --env "POSTGRES_PASSWORD={{ pg_pass }}" \
+            --env "POSTGRES_DB=user_api" \
+            --health-cmd "pg_isready -U {{ pg_user }} -d user_api" \
+            --health-interval 2s \
+            --health-retries 15 \
+            --health-timeout 2s \
+            --publish 5433:5432 \
+            --hostname "{{ prefix }}-pg-micro" \
+            --name "{{ prefix }}-pg-micro" \
+            --volume "{{ prefix }}-pg-micro-data:/var/lib/postgresql" \
+            --volume "$PWD/db/micro-init:/docker-entrypoint-initdb.d:ro" \
+            "{{ prefix }}-pg" \
+            -c shared_preload_libraries=pg_cron \
+            -c cron.database_name=user_api
+    fi
+
+pg-micro-down: (_down "pg-micro")
+
+pg-micro-clean: (_clean "pg-micro")
+
+pg-micro-logs: (_logs "pg-micro")
+
+run-user-api:
+    cd microservices/user-api && cargo run

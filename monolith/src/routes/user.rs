@@ -260,7 +260,7 @@ mod tests {
             .map(|AuthUser(id)| id)
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrations = "./migrations")]
     async fn register_login_refresh(db: PgPool) {
         let state = state(db);
         let st = State(state.clone());
@@ -316,7 +316,7 @@ mod tests {
         assert!(matches!(token(st, jar).await, Err(AppError::Unauthorized)));
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrations = "./migrations")]
     async fn auth_extractor(db: PgPool) {
         let state = state(db);
         let st = State(state.clone());
@@ -351,7 +351,7 @@ mod tests {
         ));
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrations = "./migrations")]
     async fn refresh_replay_revokes_session(db: PgPool) {
         let state = state(db);
         let st = State(state.clone());
@@ -384,7 +384,7 @@ mod tests {
         assert_eq!(sessions, 0);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrations = "./migrations")]
     async fn email_throttle_is_blind_to_account_existence(db: PgPool) {
         let state = state(db);
         let st = State(state.clone());
@@ -416,7 +416,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrations = "./migrations")]
     async fn ip_throttle(db: PgPool) {
         let throttle = ThrottleConfig {
             email_failures_per_minute: 5,

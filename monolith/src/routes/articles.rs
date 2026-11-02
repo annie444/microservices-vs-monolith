@@ -261,7 +261,7 @@ mod tests {
         })
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrations = "./migrations")]
     async fn create_update(db: PgPool) {
         let state = state(db);
         let st = State(state.clone());
@@ -359,7 +359,7 @@ mod tests {
         }
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrations = "./migrations")]
     async fn favorite_flow(db: PgPool) {
         let state = state(db);
         let st = State(state.clone());
@@ -460,7 +460,7 @@ mod tests {
         feed.articles.iter().map(|a| a.id).collect()
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrations = "./migrations")]
     async fn feed_pagination(db: PgPool) {
         let state = state(db);
         let st = State(state.clone());
@@ -541,7 +541,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrations = "./migrations")]
     async fn feed_following(db: PgPool) {
         let state = state(db);
         let st = State(state.clone());
@@ -589,7 +589,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrations = "./migrations")]
     async fn feed_backfill_limit(db: PgPool) {
         let state = state(db);
         let st = State(state.clone());
@@ -629,7 +629,7 @@ mod tests {
             .0;
         assert_eq!(ids(&page), [newest], "fan-out on publish still applies");
     }
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrations = "./migrations")]
     async fn article_detail(db: PgPool) {
         let state = state(db);
         let st = State(state.clone());

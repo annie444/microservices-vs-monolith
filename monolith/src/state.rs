@@ -81,22 +81,6 @@ struct CommentRow {
     author_pronouns: Option<String>,
 }
 
-#[cfg(test)]
-mod tests {
-    use sqlx::PgPool;
-
-    use super::AppState;
-    use crate::config::ThrottleConfig;
-
-    #[sqlx::test(migrations = "../migrations")]
-    async fn sweeper_check_fails_without_pg_cron(db: PgPool) {
-        // sqlx::test databases are not cron.database_name, so the migration skipped the job.
-        let state = AppState::build(db, false, &ThrottleConfig::default());
-        let err = state.check_session_sweeper().await.unwrap_err();
-        assert!(err.to_string().contains("pg_cron"), "{err:#}");
-    }
-}
-
 impl From<CommentRow> for Comment {
     fn from(r: CommentRow) -> Self {
         Self {
@@ -157,7 +141,7 @@ impl AppState {
     }
 
     pub async fn migrate(&self) -> Result<(), sqlx::migrate::MigrateError> {
-        sqlx::migrate!("./../migrations").run(&self.db).await
+        sqlx::migrate!("./migrations").run(&self.db).await
     }
 
     /// Fails unless pg_cron is loaded and the `sweep-sessions` job is scheduled. The migration
@@ -692,5 +676,21 @@ impl AppState {
         )
         .fetch_optional(&self.db)
         .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use sqlx::PgPool;
+
+    use super::AppState;
+    use crate::config::ThrottleConfig;
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn sweeper_check_fails_without_pg_cron(db: PgPool) {
+        // sqlx::test databases are not cron.database_name, so the migration skipped the job.
+        let state = AppState::build(db, false, &ThrottleConfig::default());
+        let err = state.check_session_sweeper().await.unwrap_err();
+        assert!(err.to_string().contains("pg_cron"), "{err:#}");
     }
 }

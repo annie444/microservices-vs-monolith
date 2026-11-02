@@ -1,0 +1,51 @@
+use axum::Json;
+use axum::http::{StatusCode, header};
+use axum::response::{IntoResponse, Response};
+use serde::Serialize;
+
+#[derive(Debug)]
+pub enum AppError {
+    Unauthorized,
+    NotFound(&'static str),
+    Conflict(&'static str),
+    Unprocessable(&'static str),
+    TooManyRequests(u64),
+    /// A call to another service failed; the caller logs the cause.
+    Upstream,
+    Internal(anyhow::Error),
+}
+
+#[derive(Serialize)]
+struct Body {
+    error: &'static str,
+}
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        let (status, error) = match &self {
+            Self::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
+            Self::NotFound(m) => (StatusCode::NOT_FOUND, *m),
+            Self::Conflict(m) => (StatusCode::CONFLICT, *m),
+            Self::Unprocessable(m) => (StatusCode::UNPROCESSABLE_ENTITY, *m),
+            Self::TooManyRequests(_) => (StatusCode::TOO_MANY_REQUESTS, "too many attempts"),
+            Self::Upstream => (StatusCode::BAD_GATEWAY, "upstream service failed"),
+            Self::Internal(e) => {
+                tracing::error!(error = ?e);
+                (StatusCode::INTERNAL_SERVER_ERROR, "internal error")
+            }
+        };
+        let mut response = (status, Json(Body { error })).into_response();
+        if let Self::TooManyRequests(secs) = self {
+            response
+                .headers_mut()
+                .insert(header::RETRY_AFTER, secs.into());
+        }
+        response
+    }
+}
+
+impl<E: Into<anyhow::Error>> From<E> for AppError {
+    fn from(err: E) -> Self {
+        Self::Internal(err.into())
+    }
+}

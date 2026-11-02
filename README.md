@@ -91,3 +91,36 @@ All endpoints are under the `/api/v1` path.
   `config.toml`; `0` disables one.
 - Behind the gateway, set `server.behind_proxy = true` so the IP limit keys on the rightmost
   `X-Forwarded-For` entry instead of the proxy's own address.
+
+## Microservices
+
+Four services (`microservices/{user,profile,article,comment}-api`) share the plumbing in
+`microservices/common` (errors, config loading, logging, login throttling, session cookies and
+the `AuthUser` extractor). Each service has its own Postgres database and migrations; there are
+no cross-service tables, joins or foreign keys.
+
+- Dev cluster: `just pg-micro-up` starts a second Postgres on port 5433 (same pg_cron image) with
+  databases `user_api`, `profile_api`, `article_api`, `comment_api` and the `session_verifier`
+  role (password `verifier`). pg_cron's database is `user_api`.
+- Config: each service reads `config.toml` from its working directory, overridden by
+  `<SERVICE>_<SECTION>__<KEY>` env vars (e.g. `USER_API_DB__URL`). `DATABASE_URL` is not read by
+  services; it is the compile-time URL for the sqlx macros and the monolith's database.
+- Ports: user-api 8201, profile-api 8202, article-api 8203, comment-api 8204.
+- Run one: `just run-user-api`.
+
+### Session verification across services
+
+user-api owns `users` and `sessions`. Its migration creates the `session_verifier` role and a
+`SECURITY DEFINER` function `verify_session(bytea) -> uuid`; the role can connect to the user
+database and execute that function, nothing else. Every other service holds a second pool into
+the user database as that role, and `common::auth::AuthUser` verifies the `__Host-session` cookie
+with one call to it. Production sets the role's password with `ALTER ROLE session_verifier PASSWORD ...`.
+
+### Internal endpoints
+
+Service-to-service calls use `/internal/...` routes, which the gateway must never expose.
+
+- `POST /internal/profiles` on profile-api, body `{"id": "<uuid>", "name": "..."}` → `201`
+  (or `200` if it already exists). Called by user-api during registration; if it fails the new
+  user is deleted again and the client gets `502`. Until profile-api exists, point
+  `profile_api.url` at a stub that answers `201`.

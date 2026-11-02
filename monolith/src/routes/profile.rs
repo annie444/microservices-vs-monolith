@@ -164,7 +164,7 @@ mod tests {
         })
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrations = "./migrations")]
     async fn profile_flow(db: PgPool) {
         let state = state(db);
         let st = State(state.clone());
@@ -302,7 +302,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrations = "./migrations")]
     async fn optional_auth(db: PgPool) {
         let state = state(db);
 

@@ -158,7 +158,7 @@ mod tests {
         c.comments.iter().map(|c| c.content.as_str()).collect()
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrations = "./migrations")]
     async fn comment_flow(db: PgPool) {
         let state = state(db);
         let st = State(state.clone());
@@ -248,7 +248,7 @@ mod tests {
         ));
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test(migrations = "./migrations")]
     async fn comment_permissions(db: PgPool) {
         let state = state(db);
         let st = State(state.clone());
