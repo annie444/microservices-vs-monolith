@@ -23,7 +23,10 @@ export default defineConfig({
     plugins: [tailwindcss()],
   },
   security: {
-    csp: true,
+    // Astro's CSP is unsupported under `astro dev`: Vite injects styles inline and the dev
+    // server still sends a bare `style-src 'self'`, which blocks every stylesheet and script.
+    // Builds get an external stylesheet plus hashed scripts, so CSP is production-only.
+    csp: process.env.NODE_ENV === "production",
   },
   adapter: node({
     mode: "standalone",

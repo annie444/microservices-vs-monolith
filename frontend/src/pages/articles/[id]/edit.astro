@@ -1,0 +1,12 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import Editor from '../../../components/Editor.astro';
+
+export const prerender = false;
+const { id } = Astro.params;
+if (!/^[0-9a-f-]{36}$/i.test(id!)) return new Response('Not found', { status: 404 });
+---
+
+<Layout title="Edit article">
+	<Editor id={id} />
+</Layout>

@@ -78,8 +78,10 @@ export const esc = (s: unknown) =>
 		/[&<>"']/g,
 		(c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
 	);
-export const when = (iso: string) => new Date(iso).toLocaleString();
-export const qs = (key: string) => new URLSearchParams(location.search).get(key);
+export const when = (iso: string) =>
+	new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' });
+/** Markup for an icon rendered by components/Icons.astro; '' if it isn't on the page. */
+export const ico = (name: string) => document.getElementById(`ico-${name}`)?.innerHTML ?? '';
 export const $ = <T extends HTMLElement = HTMLElement>(sel: string) =>
 	document.querySelector(sel) as T;
 

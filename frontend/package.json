@@ -20,6 +20,7 @@
     "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
+    "@iconify-json/lucide": "^1.2.150",
     "@types/node": "^26.6.6",
     "typescript": "^7.0.2"
   }

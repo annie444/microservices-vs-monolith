@@ -27,6 +27,9 @@ importers:
         specifier: ^4.3.3
         version: 4.3.3
     devDependencies:
+      '@iconify-json/lucide':
+        specifier: ^1.2.150
+        version: 1.2.150
       '@types/node':
         specifier: ^26.6.6
         version: 26.6.6
@@ -236,6 +239,9 @@ packages:
 
   '@emnapi/wasi-threads@1.2.3':
     resolution: {integrity: sha512-ELEBe8PsLvvJ6QMr0zLt8ffvOHW/dc1m3CEzNMg7aJUv3bMaoDtw2TXyDAwkYBuroxxuHEwhRTLJSe5sya547g==}
+
+  '@iconify-json/lucide@1.2.150':
+    resolution: {integrity: sha512-av3IH1CB8RuKrlKGDmBbt6dLYtZus1Vr89VOysxORLhKcTr4ARe4Dmp0gL7Q47sK9GMkyROn1a+h07tAYpSuEw==}
 
   '@iconify/tools@5.0.14':
     resolution: {integrity: sha512-wJ4ZE3/HZh2iBqLwG+8FOMHe7CMJAJqwSXZSpPwMdj1gZM3Z4t2hbQMVw4Vm45oQ985qn0g89PUIcDEdKTheBA==}
@@ -1954,6 +1960,10 @@ snapshots:
     dependencies:
       tslib: 2.9.1
     optional: true
+
+  '@iconify-json/lucide@1.2.150':
+    dependencies:
+      '@iconify/types': 2.0.0
 
   '@iconify/tools@5.0.14':
     dependencies:

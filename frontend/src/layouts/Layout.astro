@@ -1,5 +1,6 @@
 ---
-import '../styles/global.css'
+import '../styles/global.css';
+import Icons from '../components/Icons.astro';
 interface Props {
 	title?: string;
 }
@@ -15,90 +16,22 @@ const { title } = Astro.props;
 		<meta name="generator" content={Astro.generator} />
 		<title>{title ? `${title} · Articles` : 'Articles'}</title>
 	</head>
-	<body>
-		<nav>
-			<a href="/"><strong>Articles</strong></a>
-			<span id="nav-auth"></span>
-		</nav>
-		<main><slot /></main>
+	<body class="mx-auto max-w-2xl px-4">
+		<Icons />
+		<header class="flex items-center justify-between py-5">
+			<a href="/" class="font-serif text-2xl italic tracking-tight hover:text-accent">Articles</a>
+			<nav id="nav-auth" class="flex items-center gap-5 text-sm text-mute"></nav>
+		</header>
+		<main class="pb-20"><slot /></main>
 	</body>
 </html>
 
 <script>
-	import { me, esc } from '../lib/api';
+	import { me, esc, ico } from '../lib/api';
+	const link = (href: string, icon: string, label: string) =>
+		`<a href="${href}" class="meta-item hover:text-ink">${ico(icon)}${label}</a>`;
 	const p = await me();
 	document.getElementById('nav-auth')!.innerHTML = p
-		? `<a href="/write">Write</a><a href="/profile">${esc(p.name)}</a>`
-		: `<a href="/login">Log in</a>`;
+		? link('/write', 'pen-line', 'Write') + link('/profiles/me', 'user-round', esc(p.name))
+		: link('/login', 'log-in', 'Log in');
 </script>
-
-<style is:global>
-	:root {
-		color-scheme: light dark;
-		font-family: system-ui, sans-serif;
-		line-height: 1.5;
-		--rule: color-mix(in srgb, currentColor 20%, transparent);
-	}
-	body {
-		margin: 0 auto;
-		max-width: 42rem;
-		padding: 1rem;
-	}
-	nav {
-		display: flex;
-		gap: 1rem;
-		padding-bottom: 0.75rem;
-		margin-bottom: 1.5rem;
-		border-bottom: 1px solid var(--rule);
-	}
-	nav span {
-		margin-left: auto;
-		display: flex;
-		gap: 1rem;
-	}
-	a {
-		color: inherit;
-	}
-	h1 {
-		margin-bottom: 0.25rem;
-	}
-	small {
-		opacity: 0.7;
-	}
-	.cards {
-		list-style: none;
-		padding: 0;
-	}
-	.card {
-		padding: 0.75rem 0;
-		border-bottom: 1px solid var(--rule);
-	}
-	.card p {
-		margin: 0.25rem 0;
-	}
-	.content {
-		white-space: pre-wrap;
-		margin: 1.5rem 0;
-	}
-	form {
-		display: grid;
-		gap: 0.5rem;
-		margin: 1rem 0;
-	}
-	input,
-	textarea,
-	button {
-		font: inherit;
-		padding: 0.5rem;
-	}
-	button {
-		cursor: pointer;
-		justify-self: start;
-	}
-	.error {
-		color: #d33;
-	}
-	.error:empty {
-		display: none;
-	}
-</style>

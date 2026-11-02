@@ -1,0 +1,90 @@
+---
+import Layout from '../../layouts/Layout.astro';
+
+export const prerender = false;
+// `/profiles/me` is the signed-in user's own page, mirroring the API path.
+const { id } = Astro.params;
+if (id !== 'me' && !/^[0-9a-f-]{36}$/i.test(id!)) return new Response('Not found', { status: 404 });
+---
+
+<Layout title="Profile">
+	<section id="profile" data-id={id}><p class="status">Loading…</p></section>
+	<form id="edit" class="mt-12 grid gap-3 border-t border-line pt-8" hidden>
+		<h2 class="text-base font-semibold">Edit your profile</h2>
+		<label class="grid gap-1 text-sm text-mute">
+			Name
+			<input name="name" class="field" required maxlength="100" />
+		</label>
+		<label class="grid gap-1 text-sm text-mute">
+			Pronouns
+			<input name="pronouns" class="field" maxlength="50" placeholder="Optional" />
+		</label>
+		<label class="grid gap-1 text-sm text-mute">
+			Bio
+			<textarea name="bio" class="field" rows="4" maxlength="1000" placeholder="Optional"></textarea>
+		</label>
+		<button class="btn btn-primary justify-self-start">Save changes</button>
+		<p class="error"></p>
+	</form>
+</Layout>
+
+<script>
+	import { $, api, esc, ico, me, onSubmit, type Profile } from '../../lib/api';
+
+	const id = $('#profile').dataset.id!;
+	const user = await me();
+	if (id === 'me' && !user) location.replace('/login');
+
+	function render(p: Profile) {
+		const own = user?.id === p.id;
+		const followers = `${p.followers_count} follower${p.followers_count === 1 ? '' : 's'}`;
+		$('#profile').innerHTML = `
+			<h1 class="font-serif text-4xl tracking-tight">${esc(p.name)}</h1>
+			<div class="meta mt-3">
+				${p.pronouns ? `<span>${esc(p.pronouns)}</span>` : ''}
+				<span class="meta-item">${ico('users')}${followers}</span>
+			</div>
+			${p.bio ? `<p class="mt-6 whitespace-pre-wrap font-serif text-lg leading-relaxed">${esc(p.bio)}</p>` : ''}
+			${
+				own || !user
+					? ''
+					: `<button id="follow" class="btn mt-6 ${p.following ? '' : 'btn-primary'}">
+						${ico(p.following ? 'user-check' : 'user-plus')}${p.following ? 'Following' : 'Follow'}
+					</button>`
+			}`;
+		const follow = document.getElementById('follow');
+		if (follow)
+			follow.onclick = async () => {
+				const r = await api<{ followers_count: number }>(`/profiles/${p.id}/follow`, {
+					method: p.following ? 'DELETE' : 'POST',
+				});
+				render({ ...p, following: !p.following, followers_count: r.followers_count });
+			};
+	}
+
+	try {
+		const p = await api<Profile>(`/profiles/${id}`);
+		render(p);
+
+		// The edit form stays hidden unless this is the signed-in user's own profile.
+		if (user?.id === p.id) {
+			const form = $<HTMLFormElement>('#edit');
+			form.hidden = false;
+			(form.elements.namedItem('name') as HTMLInputElement).value = p.name;
+			(form.elements.namedItem('pronouns') as HTMLInputElement).value = p.pronouns ?? '';
+			(form.elements.namedItem('bio') as HTMLTextAreaElement).value = p.bio ?? '';
+			onSubmit(
+				form,
+				(data) =>
+					api<Profile>('/profiles/me', {
+						method: 'PUT',
+						// Full replacement: empty fields become null rather than "".
+						json: { name: data.name, pronouns: data.pronouns || null, bio: data.bio || null },
+					}),
+				(updated) => render({ ...updated, following: false }),
+			);
+		}
+	} catch (e) {
+		$('#profile').innerHTML = `<p class="error">${esc((e as Error).message)}</p>`;
+	}
+</script>

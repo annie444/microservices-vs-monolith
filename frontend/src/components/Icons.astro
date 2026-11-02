@@ -1,0 +1,29 @@
+---
+// Icons the client scripts need. Rendered once here, cloned via `ico()` in ../lib/api.ts,
+// because client-built markup (feed cards, comments) can't use <Icon> directly.
+import { Icon } from 'astro-icon/components';
+const names = [
+	'heart',
+	'message-circle',
+	'pen-line',
+	'user-round',
+	'log-in',
+	'tag',
+	'trash-2',
+	'users',
+	'user-plus',
+	'user-check',
+	'calendar',
+];
+---
+
+{
+	names.map((n) => (
+		<template id={`ico-${n}`}>
+			<Icon name={`lucide:${n}`} class="size-4 shrink-0" aria-hidden="true" />
+		</template>
+	))
+}
+<template id="ico-heart-filled">
+	<Icon name="lucide:heart" class="size-4 shrink-0 fill-current" aria-hidden="true" />
+</template>

@@ -1,1 +1,72 @@
 @import "tailwindcss";
+
+/* Light/dark flip lives in these variables so markup never needs `dark:`. */
+:root {
+	color-scheme: light dark;
+	--paper: #f4f6f8;
+	--surface: #ffffff;
+	--ink: #16202b;
+	--mute: #65717e;
+	--line: #d9dee4;
+	--accent: #2e4fd6;
+	--heart: #d1434e;
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--paper: #0e1318;
+		--surface: #161d25;
+		--ink: #e8ecf1;
+		--mute: #94a0ad;
+		--line: #2a333e;
+		--accent: #7c93f0;
+		--heart: #f0707a;
+	}
+}
+
+@theme inline {
+	--color-paper: var(--paper);
+	--color-surface: var(--surface);
+	--color-ink: var(--ink);
+	--color-mute: var(--mute);
+	--color-line: var(--line);
+	--color-accent: var(--accent);
+	--color-heart: var(--heart);
+	--font-serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif;
+	--font-sans: ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+	body {
+		@apply bg-paper text-ink font-sans antialiased;
+	}
+	:focus-visible {
+		@apply outline-2 outline-offset-2 outline-accent;
+	}
+}
+
+@layer components {
+	.btn {
+		@apply inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink hover:border-mute disabled:cursor-not-allowed disabled:opacity-50;
+	}
+	.btn-primary {
+		@apply border-accent bg-accent text-white hover:border-accent hover:opacity-90;
+	}
+	.btn-ghost {
+		@apply border-transparent bg-transparent px-1.5 text-mute hover:border-transparent hover:text-ink;
+	}
+	.field {
+		@apply w-full rounded-md border border-line bg-surface px-3 py-2 text-ink placeholder:text-mute;
+	}
+	.meta {
+		@apply flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-mute;
+	}
+	.meta-item {
+		@apply inline-flex items-center gap-1.5;
+	}
+	.error {
+		@apply text-sm text-heart empty:hidden;
+	}
+	.status {
+		@apply text-sm text-mute empty:hidden;
+	}
+}

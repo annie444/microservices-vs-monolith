@@ -1,34 +1,60 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import { Icon } from 'astro-icon/components';
 ---
 
 <Layout title="Log in">
-	<form id="login">
-		<h1>Log in</h1>
-		<input name="email" type="email" required autocomplete="email" placeholder="Email" />
+	<form id="login" class="grid gap-3">
+		<h1 class="font-serif text-4xl tracking-tight">Log in</h1>
+		<input
+			name="email"
+			type="email"
+			class="field mt-3"
+			required
+			autocomplete="email"
+			placeholder="Email"
+		/>
 		<input
 			name="password"
 			type="password"
+			class="field"
 			required
 			autocomplete="current-password"
 			placeholder="Password"
 		/>
-		<button>Log in</button>
+		<button class="btn btn-primary justify-self-start">
+			<Icon name="lucide:log-in" class="size-4" aria-hidden="true" /> Log in
+		</button>
 		<p class="error"></p>
 	</form>
 
-	<form id="register">
-		<h2>New here? Register</h2>
-		<input name="name" required maxlength="100" autocomplete="name" placeholder="Display name" />
-		<input name="email" type="email" required autocomplete="email" placeholder="Email" />
+	<form id="register" class="mt-12 grid gap-3 border-t border-line pt-8">
+		<h2 class="font-serif text-2xl tracking-tight">New here? Create an account</h2>
+		<input
+			name="name"
+			class="field mt-3"
+			required
+			maxlength="100"
+			autocomplete="name"
+			placeholder="Display name"
+		/>
+		<input
+			name="email"
+			type="email"
+			class="field"
+			required
+			autocomplete="email"
+			placeholder="Email"
+		/>
 		<input
 			name="password"
 			type="password"
+			class="field"
 			required
 			autocomplete="new-password"
 			placeholder="Password"
 		/>
-		<button>Register</button>
+		<button class="btn justify-self-start">Create account</button>
 		<p class="error"></p>
 	</form>
 </Layout>

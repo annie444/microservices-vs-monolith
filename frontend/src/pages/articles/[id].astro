@@ -1,0 +1,143 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { Icon } from 'astro-icon/components';
+
+export const prerender = false;
+const { id } = Astro.params;
+if (!/^[0-9a-f-]{36}$/i.test(id!)) return new Response('Not found', { status: 404 });
+---
+
+<Layout title="Article">
+	<article id="article" data-id={id}><p class="status">Loading…</p></article>
+	<section class="mt-14 border-t border-line pt-8">
+		<h2 class="flex items-center gap-2 text-base font-semibold">
+			<Icon name="lucide:message-circle" class="size-4" aria-hidden="true" /> Comments
+		</h2>
+		<form id="comment-form" class="mt-4 grid gap-3" hidden>
+			<textarea
+				name="content"
+				class="field"
+				rows="3"
+				required
+				maxlength="2000"
+				placeholder="Add a comment"></textarea>
+			<button class="btn btn-primary justify-self-start">Post comment</button>
+			<p class="error"></p>
+		</form>
+		<ul id="comments" class="mt-4 divide-y divide-line"></ul>
+		<p id="cstatus" class="status mt-4"></p>
+		<button id="more" class="btn mt-4" hidden>Load more</button>
+	</section>
+</Layout>
+
+<script>
+	import {
+		$,
+		api,
+		esc,
+		ico,
+		when,
+		me,
+		onSubmit,
+		type Article,
+		type Comment,
+		type Comments,
+	} from '../../lib/api';
+
+	const id = $('#article').dataset.id!;
+	const user = await me();
+
+	function renderArticle(a: Article) {
+		$('#article').innerHTML = `
+			<h1 class="font-serif text-4xl leading-tight tracking-tight">${esc(a.title)}</h1>
+			${a.subtitle ? `<p class="mt-3 font-serif text-xl text-mute">${esc(a.subtitle)}</p>` : ''}
+			<div class="meta mt-5">
+				<a href="/profiles/${a.creator.id}" class="meta-item hover:text-ink">${ico('user-round')}${esc(a.creator.name)}${a.creator.pronouns ? ` <span class="text-mute">(${esc(a.creator.pronouns)})</span>` : ''}</a>
+				<span class="meta-item">${ico('calendar')}${when(a.created_at)}</span>
+				${user?.id === a.creator.id ? `<a href="/articles/${a.id}/edit" class="meta-item hover:text-ink">${ico('pen-line')}Edit</a>` : ''}
+			</div>
+			<div class="mt-8 whitespace-pre-wrap font-serif text-lg leading-relaxed">${esc(a.content)}</div>
+			<div class="mt-8 flex flex-wrap items-center gap-2">
+				<button id="fav" class="btn ${a.favorited ? 'text-heart' : ''}" ${user ? '' : 'disabled title="Log in to favorite"'}>
+					${ico(a.favorited ? 'heart-filled' : 'heart')}${a.favorites}
+				</button>
+				${a.tags.map((t) => `<span class="rounded-full border border-line px-2.5 py-0.5 text-xs text-mute">${esc(t)}</span>`).join('')}
+			</div>`;
+		$('#fav').onclick = async () => {
+			const r = await api<{ favorites: number }>(`/articles/${a.id}/favorite`, {
+				method: a.favorited ? 'DELETE' : 'POST',
+			});
+			renderArticle({ ...a, favorited: !a.favorited, favorites: r.favorites });
+		};
+	}
+
+	function commentHtml(c: Comment, canDelete: boolean) {
+		return `
+			<li class="py-4" data-id="${c.id}">
+				<div class="meta">
+					<a href="/profiles/${c.author.id}" class="meta-item font-medium text-ink">${esc(c.author.name)}</a>
+					<span>${when(c.created_at)}</span>
+					${canDelete ? `<button class="btn btn-ghost del ml-auto" data-id="${c.id}" aria-label="Delete comment">${ico('trash-2')}</button>` : ''}
+				</div>
+				<p class="mt-1 whitespace-pre-wrap">${esc(c.content)}</p>
+			</li>`;
+	}
+
+	const list = $('#comments');
+	const more = $<HTMLButtonElement>('#more');
+	const status = $('#cstatus');
+	let cursor: string | null = null;
+
+	let article: Article;
+	try {
+		article = await api<Article>(`/articles/${id}`);
+		renderArticle(article);
+	} catch (e) {
+		$('#article').innerHTML = `<p class="error">${esc((e as Error).message)}</p>`;
+		throw e;
+	}
+
+	const canDelete = (c: Comment) =>
+		!!user && (user.id === c.author.id || user.id === article.creator.id);
+
+	async function loadComments() {
+		more.hidden = true;
+		status.textContent = 'Loading…';
+		try {
+			const page = await api<Comments>(`/comments/${id}${cursor ? `?cursor=${cursor}` : ''}`);
+			list.insertAdjacentHTML(
+				'beforeend',
+				page.comments.map((c) => commentHtml(c, canDelete(c))).join(''),
+			);
+			cursor = page.pagination.next_cursor;
+			more.hidden = !page.pagination.has_more;
+			status.textContent = list.children.length ? '' : 'No comments yet.';
+		} catch (e) {
+			status.textContent = (e as Error).message;
+		}
+	}
+
+	list.onclick = async (e) => {
+		const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button.del');
+		if (!btn) return;
+		await api(`/comments/${id}/${btn.dataset.id}`, { method: 'DELETE' });
+		list.querySelector(`li[data-id="${btn.dataset.id}"]`)?.remove();
+		if (!list.children.length) status.textContent = 'No comments yet.';
+	};
+
+	const form = $<HTMLFormElement>('#comment-form');
+	form.hidden = !user;
+	onSubmit(
+		form,
+		(data) => api<Comment>(`/comments/${id}`, { method: 'POST', json: data }),
+		(c) => {
+			// New comments sort last (uuidv7 ids), so append only once every page is loaded.
+			if (more.hidden) list.insertAdjacentHTML('beforeend', commentHtml(c, true));
+			status.textContent = '';
+			form.reset();
+		},
+	);
+
+	more.onclick = loadComments;
+	loadComments();
+</script>

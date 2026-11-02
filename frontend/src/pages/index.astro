@@ -3,14 +3,14 @@ import Layout from '../layouts/Layout.astro';
 ---
 
 <Layout title="Feed">
-	<h1>Feed</h1>
-	<ul id="feed" class="cards"></ul>
-	<p id="status"></p>
-	<button id="more" hidden>Load more</button>
+	<h1 class="font-serif text-4xl tracking-tight">Feed</h1>
+	<ul id="feed" class="mt-6 divide-y divide-line"></ul>
+	<p id="status" class="status mt-6"></p>
+	<button id="more" class="btn mt-6" hidden>Load more</button>
 </Layout>
 
 <script>
-	import { $, api, esc, when, type Feed } from '../lib/api';
+	import { $, api, esc, ico, when, type Feed } from '../lib/api';
 
 	const list = $('#feed');
 	const more = $<HTMLButtonElement>('#more');
@@ -27,20 +27,22 @@ import Layout from '../layouts/Layout.astro';
 				feed.articles
 					.map(
 						(a) => `
-				<li class="card">
-					<a href="/article?id=${a.id}"><strong>${esc(a.title)}</strong></a>
-					${a.subtitle ? `<p>${esc(a.subtitle)}</p>` : ''}
-					<small>
-						<a href="/profile?id=${a.creator.id}">${esc(a.creator.name)}</a> · ${when(a.created_at)}
-						· ♥ ${a.favorites}${a.tags.length ? ' · ' + a.tags.map(esc).join(', ') : ''}
-					</small>
+				<li class="py-6">
+					<a href="/articles/${a.id}" class="font-serif text-2xl leading-tight hover:text-accent">${esc(a.title)}</a>
+					${a.subtitle ? `<p class="mt-1 font-serif text-lg text-mute">${esc(a.subtitle)}</p>` : ''}
+					<div class="meta mt-3">
+						<a href="/profiles/${a.creator.id}" class="meta-item hover:text-ink">${ico('user-round')}${esc(a.creator.name)}</a>
+						<span class="meta-item">${ico('calendar')}${when(a.created_at)}</span>
+						<span class="meta-item">${ico('heart')}${a.favorites}</span>
+						${a.tags.length ? `<span class="meta-item">${ico('tag')}${a.tags.map(esc).join(', ')}</span>` : ''}
+					</div>
 				</li>`,
 					)
 					.join(''),
 			);
 			cursor = feed.pagination.next_cursor;
 			more.hidden = !feed.pagination.has_more;
-			status.textContent = list.children.length ? '' : 'No articles yet.';
+			status.textContent = list.children.length ? '' : 'Nothing here yet. Be the first to write.';
 		} catch (e) {
 			status.textContent = (e as Error).message;
 		}
